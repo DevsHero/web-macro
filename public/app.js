@@ -753,14 +753,11 @@
     elements.logCount.textContent = `${visibleLogs.length} visible / ${state.logs.length} total`;
     elements.toggleLogsButton.textContent = state.logsVisible ? 'Hide Logs' : 'Show Logs';
     elements.expandLogsButton.textContent = state.logsExpanded ? 'Compact' : 'Expand';
-    elements.expandLogsButton.disabled = !state.logsVisible;
+    elements.expandLogsButton.disabled = false;
+    elements.expandLogsButton.removeAttribute('disabled');
     elements.logPanel.dataset.expanded = state.logsExpanded ? 'true' : 'false';
     elements.logsBodyWrapper.classList.toggle('hidden', !state.logsVisible);
-    elements.dashboardMain.style.paddingBottom = state.logsVisible
-      ? state.logsExpanded
-        ? '40rem'
-        : '24rem'
-      : '6rem';
+    elements.dashboardMain.style.paddingBottom = '6rem';
 
     if (!visibleLogs.length) {
       elements.logConsole.innerHTML = '<p class="text-slate-500">No logs match the current filter.</p>';
@@ -1325,13 +1322,16 @@
     state.logsVisible = !state.logsVisible;
     if (state.logsVisible) {
       state.logStickToBottom = true;
+    } else {
+      state.logsExpanded = false;
     }
     renderLogs();
   });
 
   elements.expandLogsButton.addEventListener('click', () => {
     if (!state.logsVisible) {
-      return;
+      state.logsVisible = true;
+      state.logStickToBottom = true;
     }
 
     state.logsExpanded = !state.logsExpanded;
