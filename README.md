@@ -66,5 +66,5 @@ http://localhost:3005
 ![Web Macro screenshot](screenshot/screenshot1.png)
 ![Web Macro screenshot](screenshot/screenshot2.png)
 ![Web Macro screenshot](screenshot/screenshot3.png)
-![Sample use macro in Ragnarok Browser](screenshot/screenshot4.png)
+![Sample use macro in Ragnarok Browser](screenshot/ro.png)
 
