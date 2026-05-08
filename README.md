@@ -60,3 +60,11 @@ http://localhost:3005
 - This codebase intentionally omits CI/CD per current project scope.
 - The original testing instance on port 3006 is not part of this new default runtime.
 - Configs are portable JSON files and can be moved between machines directly or through the dashboard export/import flow.
+
+## Screenshot
+
+![Web Macro screenshot](screenshot/screenshot1.png)
+![Web Macro screenshot](screenshot/screenshot2.png)
+![Web Macro screenshot](screenshot/screenshot3.png)
+![Sample use macro in Ragnarok Browser](screenshot/screenshot4.png)
+
