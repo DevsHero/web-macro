@@ -1,0 +1,11 @@
+node_modules
+user_data
+opera_profile
+.env
+.env.*
+.cache
+logs
+playwright-report
+test-results
+.DS_Store
+npm-debug.log*

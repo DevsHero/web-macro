@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>web-macro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Space Grotesk"', 'ui-sans-serif', 'system-ui'],
+              mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+            },
+            colors: {
+              ink: '#e2e8f0',
+              panel: '#0f172a',
+              accent: '#2dd4bf',
+              ember: '#f59e0b',
+              rose: '#fb7185',
+            },
+            boxShadow: {
+              glow: '0 24px 80px rgba(15, 23, 42, 0.45)',
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap');
+
+      :root {
+        color-scheme: dark;
+      }
+
+      body {
+        background:
+          radial-gradient(circle at top left, rgba(45, 212, 191, 0.18), transparent 28%),
+          radial-gradient(circle at top right, rgba(251, 113, 133, 0.14), transparent 30%),
+          linear-gradient(180deg, #020617 0%, #0b1120 100%);
+      }
+
+      .noise {
+        background-image: linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+        background-size: 26px 26px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85), transparent 95%);
+      }
+
+      .terminal-scroll::-webkit-scrollbar {
+        width: 10px;
+      }
+
+      .terminal-scroll::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.22);
+        border-radius: 999px;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen font-sans text-ink antialiased">
+    <div class="noise pointer-events-none fixed inset-0 -z-10 opacity-60"></div>
+
+    <header class="sticky top-0 z-40 border-b border-white/10 bg-slate-950/75 backdrop-blur-xl">
+      <div class="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-5 sm:px-6 lg:px-8 lg:py-6">
+        <div class="flex flex-col justify-between gap-5 xl:flex-row xl:items-start">
+          <div class="space-y-3">
+            <div class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.32em] text-slate-400">
+              web-macro
+            </div>
+            <div>
+              <h1 class="text-3xl font-bold tracking-tight text-white sm:text-4xl">Multi-Tab Workflow Operations</h1>
+              <p class="mt-2 max-w-3xl text-sm text-slate-400 sm:text-base">
+                Coordinate background-safe browser workflows, portable JSON configs, and serialized per-tab execution from one control plane.
+              </p>
+            </div>
+          </div>
+
+          <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <div id="connectionPill" class="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-200">
+              <span class="h-2.5 w-2.5 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.85)]"></span>
+              <span id="connectionText">Connecting...</span>
+            </div>
+
+            <button id="addTabButton" type="button" class="inline-flex items-center justify-center rounded-2xl border border-teal-300/20 bg-teal-300/10 px-5 py-3 text-sm font-semibold text-teal-100 transition hover:border-teal-200/40 hover:bg-teal-300/20 disabled:cursor-not-allowed disabled:opacity-60">
+              Add New Game Tab
+            </button>
+
+            <button id="toggleLogsButton" type="button" class="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">
+              Show Logs
+            </button>
+          </div>
+        </div>
+
+        <div class="grid gap-4 xl:grid-cols-[1.1fr_1.4fr]">
+          <section class="rounded-[2rem] border border-white/10 bg-slate-900/70 p-5 shadow-glow backdrop-blur">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Browser Runtime</p>
+                <p id="currentBrowserSummary" class="mt-3 text-xl font-semibold text-white">Browser not configured</p>
+                <p id="currentBrowserMeta" class="mt-2 text-sm text-slate-400">Using current controller settings</p>
+              </div>
+              <button id="openBrowserSettingsButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">
+                Runtime Settings
+              </button>
+            </div>
+          </section>
+
+          <section class="rounded-[2rem] border border-white/10 bg-slate-900/70 p-5 shadow-glow backdrop-blur">
+            <div class="flex flex-col gap-5">
+              <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Config Library</p>
+                  <h2 class="mt-2 text-xl font-semibold text-white">Portable JSON Snapshots</h2>
+                  <p class="mt-2 max-w-2xl text-sm text-slate-400">Save the full browser + workflow runtime, export configs for another machine, and import them back into the controller without manual editing.</p>
+                </div>
+                <p id="savedConfigMeta" class="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.22em] text-slate-400">0 configs available</p>
+              </div>
+
+              <div class="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                <div class="rounded-3xl border border-white/10 bg-black/15 p-4">
+                  <label class="block">
+                    <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Saved Configs</span>
+                    <select id="savedConfigSelect" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-teal-300/40 focus:bg-white/10"></select>
+                  </label>
+                  <div class="mt-4 grid gap-2 sm:grid-cols-2">
+                    <button id="loadConfigButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Load Snapshot</button>
+                    <button id="deleteConfigButton" type="button" class="rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-300/20">Delete</button>
+                    <button id="exportConfigButton" type="button" class="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/20">Export JSON</button>
+                    <button id="importConfigButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Import JSON</button>
+                  </div>
+                </div>
+
+                <div class="rounded-3xl border border-white/10 bg-black/15 p-4">
+                  <label class="block">
+                    <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Config Name</span>
+                    <input id="configNameInput" type="text" placeholder="web-macro config" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-teal-300/40 focus:bg-white/10" />
+                  </label>
+                  <label class="mt-4 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+                    <input id="configResumeToggle" type="checkbox" class="h-4 w-4 rounded border-white/20 bg-slate-900 text-teal-300" />
+                    Resume enabled workflows when loading this snapshot
+                  </label>
+                  <button id="saveConfigButton" type="button" class="mt-4 w-full rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-3 text-sm font-semibold text-teal-100 transition hover:bg-teal-300/20">Save Snapshot</button>
+                  <p class="mt-4 text-xs text-slate-500">Current config: <span id="currentConfigLabel">Unsaved live session</span></p>
+                </div>
+              </div>
+
+              <input id="importConfigInput" type="file" accept="application/json,.json" class="hidden" />
+            </div>
+          </section>
+        </div>
+
+        <div id="flashMessage" class="hidden rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100"></div>
+      </div>
+    </header>
+
+    <main id="dashboardMain" class="mx-auto max-w-7xl px-5 pb-24 pt-8 sm:px-6 lg:px-8">
+      <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div class="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-glow backdrop-blur">
+          <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Active Tabs</p>
+          <p id="statTabs" class="mt-3 text-4xl font-bold text-white">0</p>
+          <p class="mt-2 text-sm text-slate-400">Tracked game tabs in the dev controller.</p>
+        </div>
+        <div class="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-glow backdrop-blur">
+          <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Workflows</p>
+          <p id="statWorkflows" class="mt-3 text-4xl font-bold text-white">0</p>
+          <p class="mt-2 text-sm text-slate-400">Configured compact workflows across all tabs.</p>
+        </div>
+        <div class="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-glow backdrop-blur">
+          <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Executing</p>
+          <p id="statExecuting" class="mt-3 text-4xl font-bold text-white">0</p>
+          <p class="mt-2 text-sm text-slate-400">Currently running workflow executions.</p>
+        </div>
+        <div class="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-glow backdrop-blur">
+          <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Errors</p>
+          <p id="statErrors" class="mt-3 text-4xl font-bold text-white">0</p>
+          <p class="mt-2 text-sm text-slate-400">Workflows carrying the last error state.</p>
+        </div>
+        <div class="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-glow backdrop-blur">
+          <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Browser Session</p>
+          <p id="browserSessionValue" class="mt-3 text-lg font-semibold text-white">No browser session</p>
+          <p id="browserSessionMeta" class="mt-2 text-sm text-slate-400">No profile information</p>
+        </div>
+      </section>
+
+      <section id="emptyState" class="mt-10 rounded-[2rem] border border-dashed border-white/10 bg-slate-900/45 p-8 text-center shadow-glow backdrop-blur">
+        <p class="text-xs uppercase tracking-[0.32em] text-slate-500">Ready</p>
+        <h2 class="mt-3 text-2xl font-semibold text-white">No managed game tabs yet</h2>
+        <p class="mx-auto mt-3 max-w-2xl text-sm leading-7 text-slate-400">
+          Open a managed tab on port 3005, then attach compact workflows that stay serialized per tab and open in a modal editor when you need the full step sequence.
+        </p>
+      </section>
+
+      <section id="tabsGrid" class="mt-10 grid gap-5 xl:grid-cols-2 2xl:grid-cols-3"></section>
+    </main>
+
+    <section id="logPanel" class="fixed bottom-0 inset-x-0 z-30 border-t border-white/10 bg-slate-950/95 backdrop-blur-xl">
+      <div class="mx-auto max-w-7xl px-5 py-4 sm:px-6 lg:px-8">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p class="text-xs uppercase tracking-[0.32em] text-slate-500">Global Log</p>
+            <p class="mt-1 text-sm text-slate-400">Realtime controller events with tab/workflow context and quick filtering.</p>
+          </div>
+          <p id="logCount" class="font-mono text-xs text-slate-500">0 visible / 0 total</p>
+        </div>
+
+        <div id="logsBodyWrapper" class="hidden">
+          <div class="mt-4 grid gap-3 lg:grid-cols-4">
+            <label class="block">
+              <span class="mb-2 block text-[11px] uppercase tracking-[0.22em] text-slate-500">Tab Filter</span>
+              <select id="logFilterTab" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"></select>
+            </label>
+            <label class="block">
+              <span class="mb-2 block text-[11px] uppercase tracking-[0.22em] text-slate-500">Workflow Filter</span>
+              <select id="logFilterWorkflow" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"></select>
+            </label>
+            <label class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+              <input id="logErrorsOnly" type="checkbox" class="h-4 w-4 rounded border-white/20 bg-slate-900 text-teal-300" />
+              Errors only
+            </label>
+            <button id="clearLogsButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Clear Logs</button>
+          </div>
+
+          <div id="logConsole" class="terminal-scroll mt-4 h-60 overflow-y-auto rounded-3xl border border-white/10 bg-black/30 p-4 font-mono text-xs leading-6 text-slate-300"></div>
+        </div>
+      </div>
+    </section>
+
+    <div id="workflowModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 px-4 py-8 backdrop-blur-sm">
+      <div class="mx-auto max-w-5xl">
+        <div class="rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 shadow-glow backdrop-blur-xl">
+          <div class="flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p id="workflowModalEyebrow" class="text-xs uppercase tracking-[0.28em] text-slate-500">Create Workflow</p>
+              <h2 id="workflowModalTitle" class="mt-2 text-2xl font-semibold text-white">Workflow Editor</h2>
+              <p id="workflowModalSubtitle" class="mt-2 text-sm text-slate-400">Configure a compact workflow sequence in this modal.</p>
+            </div>
+            <button id="closeWorkflowModalButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Close</button>
+          </div>
+
+          <form id="workflowForm" class="mt-6 space-y-6">
+            <div class="grid gap-4 lg:grid-cols-4">
+              <label class="block lg:col-span-2">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Workflow Name</span>
+                <input id="workflowNameInput" type="text" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white" />
+              </label>
+              <label class="block">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Interval (seconds)</span>
+                <input id="workflowIntervalInput" type="number" min="1" step="1" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white" />
+              </label>
+              <label class="block">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Start Delay (seconds)</span>
+                <input id="workflowStartDelayInput" type="number" min="0" step="1" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white" />
+              </label>
+            </div>
+
+            <div class="grid gap-4 lg:grid-cols-2 xl:grid-cols-[1fr_1fr_auto_auto] xl:items-end">
+              <label class="block">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Overlap Policy</span>
+                <select id="workflowOverlapPolicySelect" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"></select>
+              </label>
+              <label class="block">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Tab Activation</span>
+                <select id="workflowActivationPolicySelect" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"></select>
+              </label>
+              <label class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+                <input id="workflowEnabledInput" type="checkbox" class="h-4 w-4 rounded border-white/20 bg-slate-900 text-teal-300" />
+                Enabled when saved
+              </label>
+              <div class="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <select id="workflowTemplateSelect" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"></select>
+                <button id="applyWorkflowTemplateButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Use Template</button>
+              </div>
+            </div>
+
+            <div class="grid gap-4 lg:grid-cols-2">
+              <label class="block">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Description</span>
+                <textarea id="workflowDescriptionInput" rows="3" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"></textarea>
+              </label>
+              <label class="block">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Notes</span>
+                <textarea id="workflowNotesInput" rows="3" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"></textarea>
+              </label>
+            </div>
+
+            <div class="rounded-3xl border border-white/10 bg-white/5 p-4">
+              <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p class="text-sm font-semibold text-white">Workflow Steps</p>
+                  <p class="mt-1 text-sm text-slate-400">Reorder, duplicate, or delete steps. Full details stay inside this editor.</p>
+                </div>
+                <div class="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <select id="newStepTypeSelect" class="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white"></select>
+                  <button id="addWorkflowStepButton" type="button" class="rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-3 text-sm font-semibold text-teal-100 transition hover:bg-teal-300/20">Add Step</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="workflowSteps" class="space-y-4"></div>
+
+            <div class="flex flex-col gap-3 border-t border-white/10 pt-5 lg:flex-row lg:items-center lg:justify-between">
+              <button id="duplicateWorkflowButton" type="button" class="hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Duplicate Workflow</button>
+              <div class="flex flex-wrap gap-3 lg:justify-end">
+                <button id="testWorkflowButton" type="button" class="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/20">Test Run Once</button>
+                <button id="cancelWorkflowButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Cancel</button>
+                <button id="saveWorkflowButton" type="submit" class="rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-3 text-sm font-semibold text-teal-100 transition hover:bg-teal-300/20">Save Workflow</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="browserModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 px-4 py-8 backdrop-blur-sm">
+      <div class="mx-auto max-w-3xl">
+        <div class="rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 shadow-glow backdrop-blur-xl">
+          <div class="flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Browser Settings</p>
+              <h2 class="mt-2 text-2xl font-semibold text-white">Configure the 3005 web-macro runtime</h2>
+              <p class="mt-2 text-sm text-slate-400">Tune the production-facing browser session, hidden-screen behavior, and executable/profile paths here.</p>
+            </div>
+            <button id="closeBrowserModalButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Close</button>
+          </div>
+
+          <form id="browserForm" class="mt-6 space-y-5">
+            <div class="grid gap-4 lg:grid-cols-2">
+              <label class="block">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Browser</span>
+                <select id="browserTypeSelect" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"></select>
+              </label>
+              <label class="block">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Launch Mode</span>
+                <select id="browserLaunchModeSelect" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"></select>
+              </label>
+            </div>
+
+            <div class="grid gap-4 lg:grid-cols-2">
+              <label class="block">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Executable Path</span>
+                <input id="browserExecutablePathInput" type="text" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white" />
+              </label>
+              <label class="block">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Profile / userDataDir</span>
+                <input id="browserUserDataDirInput" type="text" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white" />
+              </label>
+            </div>
+
+            <div class="grid gap-4 lg:grid-cols-2">
+              <label class="block">
+                <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">CDP URL</span>
+                <input id="browserCdpUrlInput" type="text" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white" />
+              </label>
+              <label class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+                <input id="browserHeadlessInput" type="checkbox" class="h-4 w-4 rounded border-white/20 bg-slate-900 text-teal-300" />
+                Headless (not recommended for this game)
+              </label>
+            </div>
+
+            <label class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+              <input id="browserActivateTabInput" type="checkbox" class="h-4 w-4 rounded border-white/20 bg-slate-900 text-teal-300" />
+              Allow workflows to activate or focus tabs when a step requests it
+            </label>
+
+            <label class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+              <input id="browserOptimizeForHiddenExecutionInput" type="checkbox" class="h-4 w-4 rounded border-white/20 bg-slate-900 text-teal-300" />
+              Optimize browser runtime for hidden-screen and occluded-tab execution
+            </label>
+
+            <label class="block">
+              <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Launch Args (one per line)</span>
+              <textarea id="browserArgsTextarea" rows="6" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white"></textarea>
+            </label>
+
+            <div class="flex flex-wrap justify-end gap-3 border-t border-white/10 pt-5">
+              <button id="cancelBrowserButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Cancel</button>
+              <button id="saveBrowserButton" type="submit" class="rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-3 text-sm font-semibold text-teal-100 transition hover:bg-teal-300/20">Apply Browser Settings</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

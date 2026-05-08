@@ -1,0 +1,288 @@
+{
+  "configName": "RO Workflow Config",
+  "savedAt": "2026-05-07T16:33:13.320Z",
+  "browser": {
+    "type": "opera",
+    "executablePath": "",
+    "userDataDir": "",
+    "launchMode": "launch",
+    "connectOverCDP": false,
+    "cdpUrl": "http://127.0.0.1:9222",
+    "args": [
+      "--start-maximized",
+      "--no-first-run",
+      "--disable-default-browser-check",
+      "--disable-background-networking",
+      "--disable-background-timer-throttling",
+      "--disable-renderer-backgrounding",
+      "--disable-backgrounding-occluded-windows"
+    ],
+    "headless": false,
+    "activateTabOnInteraction": false,
+    "optimizeForHiddenExecution": true
+  },
+  "tabs": [
+    {
+      "id": 1,
+      "name": "Tab 1",
+      "url": "https://www.the4rtist.com/playro/?v=1778159592185",
+      "pausedAll": false,
+      "defaultPosition": {
+        "coordinateSystem": "canvas",
+        "mode": "preset",
+        "preset": "center",
+        "xRatio": 0.5,
+        "yRatio": 0.55
+      },
+      "workflows": [
+        {
+          "id": "workflow-1",
+          "name": "AGI UP",
+          "enabled": true,
+          "intervalSeconds": 219,
+          "startDelaySeconds": 0,
+          "description": "",
+          "notes": "",
+          "overlapPolicy": "skip",
+          "tabActivationPolicy": "background",
+          "pauseReason": null,
+          "createdAt": "2026-05-07T13:14:05.411Z",
+          "updatedAt": "2026-05-07T16:30:01.638Z",
+          "lastRunAt": "2026-05-07T16:30:01.638Z",
+          "nextRunAt": 1778171620638,
+          "runCount": 64,
+          "errorCount": 0,
+          "lastError": null,
+          "steps": [
+            {
+              "id": "draft-step-2qgh2esg",
+              "command": "keyboard",
+              "delayBeforeMs": 100,
+              "delayAfterMs": 100,
+              "key": "F7",
+              "holdDurationMs": 100
+            },
+            {
+              "id": "draft-step-2le9p6zo",
+              "command": "click",
+              "delayBeforeMs": 100,
+              "delayAfterMs": 100,
+              "button": "left",
+              "clickCount": 1,
+              "position": {
+                "coordinateSystem": "canvas",
+                "mode": "preset",
+                "preset": "center"
+              }
+            }
+          ]
+        },
+        {
+          "id": "workflow-2",
+          "name": "ASPD",
+          "enabled": true,
+          "intervalSeconds": 1799,
+          "startDelaySeconds": 0,
+          "description": "",
+          "notes": "",
+          "overlapPolicy": "skip",
+          "tabActivationPolicy": "background",
+          "pauseReason": null,
+          "createdAt": "2026-05-07T13:16:15.676Z",
+          "updatedAt": "2026-05-07T16:16:09.846Z",
+          "lastRunAt": "2026-05-07T16:16:09.846Z",
+          "nextRunAt": 1778172368846,
+          "runCount": 6,
+          "errorCount": 0,
+          "lastError": null,
+          "steps": [
+            {
+              "id": "draft-step-zqkypl0v",
+              "command": "keyboard",
+              "delayBeforeMs": 0,
+              "delayAfterMs": 0,
+              "key": "F8",
+              "holdDurationMs": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Tab 2",
+      "url": "https://www.the4rtist.com/playro/?v=1778159655155",
+      "pausedAll": false,
+      "defaultPosition": {
+        "coordinateSystem": "canvas",
+        "mode": "preset",
+        "preset": "center",
+        "xRatio": 0.5,
+        "yRatio": 0.55
+      },
+      "workflows": [
+        {
+          "id": "workflow-3",
+          "name": "ASPD",
+          "enabled": true,
+          "intervalSeconds": 1799,
+          "startDelaySeconds": 0,
+          "description": "",
+          "notes": "",
+          "overlapPolicy": "skip",
+          "tabActivationPolicy": "background",
+          "pauseReason": null,
+          "createdAt": "2026-05-07T13:24:11.043Z",
+          "updatedAt": "2026-05-07T16:24:19.960Z",
+          "lastRunAt": "2026-05-07T16:24:19.960Z",
+          "nextRunAt": 1778172858960,
+          "runCount": 6,
+          "errorCount": 0,
+          "lastError": null,
+          "steps": [
+            {
+              "id": "draft-step-p0fiqsqz",
+              "command": "keyboard",
+              "delayBeforeMs": 0,
+              "delayAfterMs": 0,
+              "key": "F8",
+              "holdDurationMs": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Tab 3",
+      "url": "https://www.the4rtist.com/playro/?v=1778160224243",
+      "pausedAll": false,
+      "defaultPosition": {
+        "coordinateSystem": "canvas",
+        "mode": "preset",
+        "preset": "center",
+        "xRatio": 0.5,
+        "yRatio": 0.55
+      },
+      "workflows": [
+        {
+          "id": "workflow-6",
+          "name": "ASPD",
+          "enabled": true,
+          "intervalSeconds": 1799,
+          "startDelaySeconds": 0,
+          "description": "",
+          "notes": "",
+          "overlapPolicy": "skip",
+          "tabActivationPolicy": "background",
+          "pauseReason": null,
+          "createdAt": "2026-05-07T13:41:39.721Z",
+          "updatedAt": "2026-05-07T16:11:34.842Z",
+          "lastRunAt": "2026-05-07T16:11:34.842Z",
+          "nextRunAt": 1778172093842,
+          "runCount": 5,
+          "errorCount": 0,
+          "lastError": null,
+          "steps": [
+            {
+              "id": "draft-step-9abkjmz2",
+              "command": "keyboard",
+              "delayBeforeMs": 0,
+              "delayAfterMs": 0,
+              "key": "F8",
+              "holdDurationMs": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Tab 5",
+      "url": "https://www.the4rtist.com/playro/?v=1778160625104",
+      "pausedAll": false,
+      "defaultPosition": {
+        "coordinateSystem": "canvas",
+        "mode": "preset",
+        "preset": "center",
+        "xRatio": 0.5,
+        "yRatio": 0.55
+      },
+      "workflows": [
+        {
+          "id": "workflow-4",
+          "name": "ASPD",
+          "enabled": true,
+          "intervalSeconds": 1799,
+          "startDelaySeconds": 0,
+          "description": "",
+          "notes": "",
+          "overlapPolicy": "skip",
+          "tabActivationPolicy": "background",
+          "pauseReason": null,
+          "createdAt": "2026-05-07T13:32:56.704Z",
+          "updatedAt": "2026-05-07T16:03:37.209Z",
+          "lastRunAt": "2026-05-07T16:03:37.209Z",
+          "nextRunAt": 1778171616209,
+          "runCount": 5,
+          "errorCount": 0,
+          "lastError": null,
+          "steps": [
+            {
+              "id": "draft-step-qyns9o88",
+              "command": "keyboard",
+              "delayBeforeMs": 0,
+              "delayAfterMs": 0,
+              "key": "F8",
+              "holdDurationMs": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Tab 6",
+      "url": "https://www.the4rtist.com/playro/?v=1778160638928",
+      "pausedAll": false,
+      "defaultPosition": {
+        "coordinateSystem": "canvas",
+        "mode": "preset",
+        "preset": "center",
+        "xRatio": 0.5,
+        "yRatio": 0.55
+      },
+      "workflows": [
+        {
+          "id": "workflow-5",
+          "name": "Angelus",
+          "enabled": true,
+          "intervalSeconds": 299,
+          "startDelaySeconds": 0,
+          "description": "",
+          "notes": "",
+          "overlapPolicy": "skip",
+          "tabActivationPolicy": "background",
+          "pauseReason": null,
+          "createdAt": "2026-05-07T13:33:29.493Z",
+          "updatedAt": "2026-05-07T16:32:56.855Z",
+          "lastRunAt": "2026-05-07T16:32:56.855Z",
+          "nextRunAt": 1778171875855,
+          "runCount": 37,
+          "errorCount": 0,
+          "lastError": null,
+          "steps": [
+            {
+              "id": "draft-step-jwghanww",
+              "command": "keyboard",
+              "delayBeforeMs": 0,
+              "delayAfterMs": 0,
+              "key": "F6",
+              "holdDurationMs": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

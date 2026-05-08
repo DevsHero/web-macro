@@ -1,0 +1,24 @@
+{
+  "name": "web-macro",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-focused multi-tab browser macro controller with workflow orchestration and JSON config portability.",
+  "main": "server.js",
+  "scripts": {
+    "prestart": "sh -c 'port=${PORT:-3005}; pids=$(lsof -tiTCP:$port -sTCP:LISTEN); [ -n \"$pids\" ] && kill -9 $pids || true'",
+    "start": "node server.js",
+    "dev": "node server.js",
+    "stop": "sh -c 'port=${PORT:-3005}; pids=$(lsof -tiTCP:$port -sTCP:LISTEN); [ -n \"$pids\" ] && kill -9 $pids || true'",
+    "check": "node --check server.js && node -e \"new Function(require('fs').readFileSync('public/app.js','utf8'))\" && node -e \"JSON.parse(require('fs').readFileSync('package.json','utf8'))\"",
+    "clean": "rm -rf user_data opera_profile .cache",
+    "postinstall": "playwright install chromium"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "playwright": "^1.53.0",
+    "socket.io": "^4.8.1"
+  }
+}
