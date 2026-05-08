@@ -32,12 +32,30 @@
         background: rgba(148, 163, 184, 0.22);
         border-radius: 999px;
       }
+
+      #logPanel {
+        transition: transform 0.2s ease, border-color 0.2s ease;
+      }
+
+      #logPanel[data-expanded='true'] #logConsole {
+        height: min(56vh, 34rem);
+      }
+
+      #logPanel[data-expanded='false'] #logConsole {
+        height: 15rem;
+      }
+
+      #currentBrowserMeta {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
     </style>
   </head>
   <body class="min-h-screen font-sans text-ink antialiased">
     <div class="noise pointer-events-none fixed inset-0 -z-10 opacity-60"></div>
 
-    <header class="sticky top-0 z-40 border-b border-white/10 bg-slate-950/75 backdrop-blur-xl">
+    <header class="relative z-20 border-b border-white/10 bg-slate-950/75 backdrop-blur-xl">
       <div class="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-5 sm:px-6 lg:px-8 lg:py-6">
         <div class="flex flex-col justify-between gap-5 xl:flex-row xl:items-start">
           <div class="space-y-3">
@@ -62,69 +80,28 @@
               Add New Tab
             </button>
 
+            <button id="openConfigModalButton" type="button" class="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">
+              Config
+            </button>
+
             <button id="toggleLogsButton" type="button" class="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">
               Show Logs
             </button>
           </div>
         </div>
 
-        <div class="grid gap-4 xl:grid-cols-[1.1fr_1.4fr]">
-          <section class="rounded-[2rem] border border-white/10 bg-slate-900/70 p-5 shadow-glow backdrop-blur">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Browser Runtime</p>
-                <p id="currentBrowserSummary" class="mt-3 text-xl font-semibold text-white">Browser not configured</p>
-                <p id="currentBrowserMeta" class="mt-2 text-sm text-slate-400">Using current controller settings</p>
-              </div>
-              <button id="openBrowserSettingsButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">
-                Runtime Settings
-              </button>
+        <section class="rounded-[2rem] border border-white/10 bg-slate-900/70 p-5 shadow-glow backdrop-blur">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="min-w-0">
+              <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Browser Runtime</p>
+              <p id="currentBrowserSummary" class="mt-2 text-lg font-semibold text-white">Browser not configured</p>
+              <p id="currentBrowserMeta" class="mt-1 text-sm text-slate-400">Using current controller settings</p>
             </div>
-          </section>
-
-          <section class="rounded-[2rem] border border-white/10 bg-slate-900/70 p-5 shadow-glow backdrop-blur">
-            <div class="flex flex-col gap-5">
-              <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Config Library</p>
-                  <h2 class="mt-2 text-xl font-semibold text-white">Portable JSON Snapshots</h2>
-                  <p class="mt-2 max-w-2xl text-sm text-slate-400">Save the full browser + workflow runtime, export configs for another machine, and import them back into the controller without manual editing.</p>
-                </div>
-                <p id="savedConfigMeta" class="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.22em] text-slate-400">0 configs available</p>
-              </div>
-
-              <div class="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-                <div class="rounded-3xl border border-white/10 bg-black/15 p-4">
-                  <label class="block">
-                    <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Saved Configs</span>
-                    <select id="savedConfigSelect" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-teal-300/40 focus:bg-white/10"></select>
-                  </label>
-                  <div class="mt-4 grid gap-2 sm:grid-cols-2">
-                    <button id="loadConfigButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Load Snapshot</button>
-                    <button id="deleteConfigButton" type="button" class="rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-300/20">Delete</button>
-                    <button id="exportConfigButton" type="button" class="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/20">Export JSON</button>
-                    <button id="importConfigButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Import JSON</button>
-                  </div>
-                </div>
-
-                <div class="rounded-3xl border border-white/10 bg-black/15 p-4">
-                  <label class="block">
-                    <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Config Name</span>
-                    <input id="configNameInput" type="text" placeholder="web-macro config" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-teal-300/40 focus:bg-white/10" />
-                  </label>
-                  <label class="mt-4 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-                    <input id="configResumeToggle" type="checkbox" class="h-4 w-4 rounded border-white/20 bg-slate-900 text-teal-300" />
-                    Resume enabled workflows when loading this snapshot
-                  </label>
-                  <button id="saveConfigButton" type="button" class="mt-4 w-full rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-3 text-sm font-semibold text-teal-100 transition hover:bg-teal-300/20">Save Snapshot</button>
-                  <p class="mt-4 text-xs text-slate-500">Current config: <span id="currentConfigLabel">Unsaved live session</span></p>
-                </div>
-              </div>
-
-              <input id="importConfigInput" type="file" accept="application/json,.json" class="hidden" />
-            </div>
-          </section>
-        </div>
+            <button id="openBrowserSettingsButton" type="button" class="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">
+              Runtime Settings
+            </button>
+          </div>
+        </section>
 
         <div id="flashMessage" class="hidden rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100"></div>
       </div>
@@ -170,14 +147,19 @@
       <section id="tabsGrid" class="mt-10 grid gap-5 xl:grid-cols-2 2xl:grid-cols-3"></section>
     </main>
 
-    <section id="logPanel" class="fixed bottom-0 inset-x-0 z-30 border-t border-white/10 bg-slate-950/95 backdrop-blur-xl">
+    <section id="logPanel" data-expanded="false" class="fixed bottom-0 inset-x-0 z-30 border-t border-white/10 bg-slate-950/95 backdrop-blur-xl">
       <div class="mx-auto max-w-7xl px-5 py-4 sm:px-6 lg:px-8">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p class="text-xs uppercase tracking-[0.32em] text-slate-500">Global Log</p>
             <p class="mt-1 text-sm text-slate-400">Realtime controller events with tab/workflow context and quick filtering.</p>
           </div>
-          <p id="logCount" class="font-mono text-xs text-slate-500">0 visible / 0 total</p>
+          <div class="flex flex-wrap items-center gap-2 lg:justify-end">
+            <p id="logCount" class="font-mono text-xs text-slate-500">0 visible / 0 total</p>
+            <button id="expandLogsButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">
+              Expand
+            </button>
+          </div>
         </div>
 
         <div id="logsBodyWrapper" class="hidden">
@@ -197,10 +179,59 @@
             <button id="clearLogsButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Clear Logs</button>
           </div>
 
-          <div id="logConsole" class="terminal-scroll mt-4 h-60 overflow-y-auto rounded-3xl border border-white/10 bg-black/30 p-4 font-mono text-xs leading-6 text-slate-300"></div>
+          <div id="logConsole" class="terminal-scroll mt-4 overflow-y-auto rounded-3xl border border-white/10 bg-black/30 p-4 font-mono text-xs leading-6 text-slate-300"></div>
         </div>
       </div>
     </section>
+
+    <div id="configModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 px-4 py-8 backdrop-blur-sm">
+      <div class="mx-auto max-w-5xl">
+        <div class="rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 shadow-glow backdrop-blur-xl">
+          <div class="flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p class="text-xs uppercase tracking-[0.28em] text-slate-500">Config Library</p>
+              <h2 class="mt-2 text-2xl font-semibold text-white">Portable JSON Snapshots</h2>
+              <p class="mt-2 max-w-3xl text-sm text-slate-400">Save the full browser and workflow runtime, then export or import JSON snapshots across machines.</p>
+            </div>
+            <button id="closeConfigModalButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Close</button>
+          </div>
+
+          <div class="mt-6 flex flex-col gap-5">
+            <p id="savedConfigMeta" class="inline-flex items-center self-start rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.22em] text-slate-400">0 configs available</p>
+
+            <div class="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+              <div class="rounded-3xl border border-white/10 bg-black/15 p-4">
+                <label class="block">
+                  <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Saved Configs</span>
+                  <select id="savedConfigSelect" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-teal-300/40 focus:bg-white/10"></select>
+                </label>
+                <div class="mt-4 grid gap-2 sm:grid-cols-2">
+                  <button id="loadConfigButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Load Snapshot</button>
+                  <button id="deleteConfigButton" type="button" class="rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-300/20">Delete</button>
+                  <button id="exportConfigButton" type="button" class="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/20">Export JSON</button>
+                  <button id="importConfigButton" type="button" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Import JSON</button>
+                </div>
+              </div>
+
+              <div class="rounded-3xl border border-white/10 bg-black/15 p-4">
+                <label class="block">
+                  <span class="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">Config Name</span>
+                  <input id="configNameInput" type="text" placeholder="web-macro config" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-teal-300/40 focus:bg-white/10" />
+                </label>
+                <label class="mt-4 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+                  <input id="configResumeToggle" type="checkbox" class="h-4 w-4 rounded border-white/20 bg-slate-900 text-teal-300" />
+                  Resume enabled workflows when loading this snapshot
+                </label>
+                <button id="saveConfigButton" type="button" class="mt-4 w-full rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-3 text-sm font-semibold text-teal-100 transition hover:bg-teal-300/20">Save Snapshot</button>
+                <p class="mt-4 text-xs text-slate-500">Current config: <span id="currentConfigLabel">Unsaved live session</span></p>
+              </div>
+            </div>
+
+            <input id="importConfigInput" type="file" accept="application/json,.json" class="hidden" />
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div id="addTabModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 backdrop-blur-sm">
       <div class="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 shadow-glow backdrop-blur-xl">

@@ -72,6 +72,8 @@
     connected: false,
     addingTab: false,
     logsVisible: false,
+    logsExpanded: false,
+    logStickToBottom: true,
     selectedConfigId: '',
     logFilters: {
       tabId: 'all',
@@ -106,7 +108,9 @@
   const elements = {
     dashboardMain: document.getElementById('dashboardMain'),
     addTabButton: document.getElementById('addTabButton'),
+    openConfigModalButton: document.getElementById('openConfigModalButton'),
     toggleLogsButton: document.getElementById('toggleLogsButton'),
+    expandLogsButton: document.getElementById('expandLogsButton'),
     openBrowserSettingsButton: document.getElementById('openBrowserSettingsButton'),
     connectionPill: document.getElementById('connectionPill'),
     connectionText: document.getElementById('connectionText'),
@@ -124,6 +128,8 @@
     importConfigButton: document.getElementById('importConfigButton'),
     importConfigInput: document.getElementById('importConfigInput'),
     configResumeToggle: document.getElementById('configResumeToggle'),
+    configModal: document.getElementById('configModal'),
+    closeConfigModalButton: document.getElementById('closeConfigModalButton'),
     statTabs: document.getElementById('statTabs'),
     statWorkflows: document.getElementById('statWorkflows'),
     statExecuting: document.getElementById('statExecuting'),
@@ -506,6 +512,14 @@
     renderBrowserModal();
   }
 
+  function openConfigModal() {
+    elements.configModal.classList.remove('hidden');
+  }
+
+  function closeConfigModal() {
+    elements.configModal.classList.add('hidden');
+  }
+
   function closeBrowserModal() {
     state.browserModal = {
       open: false,
@@ -738,8 +752,15 @@
     const visibleLogs = filteredLogs();
     elements.logCount.textContent = `${visibleLogs.length} visible / ${state.logs.length} total`;
     elements.toggleLogsButton.textContent = state.logsVisible ? 'Hide Logs' : 'Show Logs';
+    elements.expandLogsButton.textContent = state.logsExpanded ? 'Compact' : 'Expand';
+    elements.expandLogsButton.disabled = !state.logsVisible;
+    elements.logPanel.dataset.expanded = state.logsExpanded ? 'true' : 'false';
     elements.logsBodyWrapper.classList.toggle('hidden', !state.logsVisible);
-    elements.dashboardMain.style.paddingBottom = state.logsVisible ? '24rem' : '6rem';
+    elements.dashboardMain.style.paddingBottom = state.logsVisible
+      ? state.logsExpanded
+        ? '40rem'
+        : '24rem'
+      : '6rem';
 
     if (!visibleLogs.length) {
       elements.logConsole.innerHTML = '<p class="text-slate-500">No logs match the current filter.</p>';
@@ -768,7 +789,9 @@
       })
       .join('');
 
-    elements.logConsole.scrollTop = elements.logConsole.scrollHeight;
+    if (state.logStickToBottom) {
+      elements.logConsole.scrollTop = elements.logConsole.scrollHeight;
+    }
   }
 
   function optionsMarkup(options, selectedValue) {
@@ -1300,7 +1323,44 @@
 
   elements.toggleLogsButton.addEventListener('click', () => {
     state.logsVisible = !state.logsVisible;
+    if (state.logsVisible) {
+      state.logStickToBottom = true;
+    }
     renderLogs();
+  });
+
+  elements.expandLogsButton.addEventListener('click', () => {
+    if (!state.logsVisible) {
+      return;
+    }
+
+    state.logsExpanded = !state.logsExpanded;
+    renderLogs();
+  });
+
+  elements.logConsole.addEventListener('scroll', () => {
+    const distanceFromBottom = elements.logConsole.scrollHeight - elements.logConsole.clientHeight - elements.logConsole.scrollTop;
+    state.logStickToBottom = distanceFromBottom < 20;
+  });
+
+  elements.openConfigModalButton.addEventListener('click', () => {
+    openConfigModal();
+  });
+
+  elements.closeConfigModalButton.addEventListener('click', () => {
+    closeConfigModal();
+  });
+
+  elements.configModal.addEventListener('click', (event) => {
+    if (event.target === elements.configModal) {
+      closeConfigModal();
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !elements.configModal.classList.contains('hidden')) {
+      closeConfigModal();
+    }
   });
 
   elements.openBrowserSettingsButton.addEventListener('click', () => {
