@@ -596,8 +596,9 @@ function shouldActivateTabForWorkflow(workflow) {
   return shouldActivateTabsDuringWorkflowRuns();
 }
 
-function isManagedGameUrl(url) {
-  return /^https:\/\/www\.the4rtist\.com\/playro\//.test(url);
+function isManagedGameUrl(_url) {
+  // Accept any non-ignorable URL so the controller works with any web app.
+  return true;
 }
 
 function isIgnorableBrowserPage(url) {
@@ -773,6 +774,34 @@ function normalizeWorkflowStep(rawStep) {
     }
     case 'bringToFront':
       return baseStep;
+    case 'type':
+      return {
+        ...baseStep,
+        text: normalizeString(rawStep && rawStep.text),
+        clearFirst: coerceBoolean(rawStep && rawStep.clearFirst, false),
+        typingDelayMs: normalizeNonNegativeInteger(rawStep && rawStep.typingDelayMs, 'Typing delay'),
+      };
+    case 'scroll':
+      return {
+        ...baseStep,
+        deltaX: coerceInteger(rawStep && rawStep.deltaX, 0),
+        deltaY: coerceInteger(rawStep && rawStep.deltaY, 120),
+      };
+    case 'navigate': {
+      const url = normalizeString(rawStep && rawStep.url);
+      if (!url) {
+        throw createHttpError('Navigate step requires a URL.', 400);
+      }
+      return {
+        ...baseStep,
+        url,
+      };
+    }
+    case 'hover':
+      return {
+        ...baseStep,
+        position: normalizePositionConfig(rawStep && rawStep.position),
+      };
     default:
       throw createHttpError(`Unsupported workflow command "${command}".`, 400);
   }
@@ -989,7 +1018,6 @@ function buildState() {
   return {
     serverTime: Date.now(),
     port: PORT,
-    gameUrl: GAME_URL,
     supportedKeys: SUPPORTED_KEYS,
     workflowTemplates: cloneValue(WORKFLOW_TEMPLATES),
     tabs: Array.from(tabs.values())
@@ -1614,6 +1642,31 @@ async function executeWorkflowStep(tab, workflow, step, index) {
       await performRobustClick(page, tab, step);
       break;
     }
+    case 'type': {
+      if (step.clearFirst) {
+        await page.keyboard.press('Control+a');
+        await page.waitForTimeout(30);
+        await page.keyboard.press('Delete');
+        await page.waitForTimeout(30);
+      }
+      if (step.text) {
+        await page.keyboard.type(step.text, { delay: step.typingDelayMs || 0 });
+      }
+      break;
+    }
+    case 'scroll': {
+      await page.mouse.wheel(step.deltaX || 0, step.deltaY || 0);
+      break;
+    }
+    case 'navigate': {
+      await page.goto(step.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      break;
+    }
+    case 'hover': {
+      const hoverPoint = await calculatePosition(page, tab, step.position);
+      await page.mouse.move(hoverPoint.x, hoverPoint.y, { steps: 8 });
+      break;
+    }
     default:
       throw new Error(`Unsupported command ${step.command}`);
   }
@@ -2169,7 +2222,7 @@ async function replaceRuntimeFromDefinitions(definition, options = {}) {
   for (const tabDefinition of tabsToRestore) {
     await createGameTab({
       label: tabDefinition.name || tabDefinition.label,
-      url: tabDefinition.url || GAME_URL,
+      url: normalizeTabUrl(tabDefinition.url),
       pausedAll: coerceBoolean(tabDefinition.pausedAll, false),
       defaultPosition: tabDefinition.defaultPosition || DEFAULT_TAB_POSITION,
       workflows: Array.isArray(tabDefinition.workflows) ? tabDefinition.workflows : [],
@@ -2179,6 +2232,24 @@ async function replaceRuntimeFromDefinitions(definition, options = {}) {
 
   isResettingController = false;
   emitState();
+}
+
+function normalizeTabUrl(rawUrl) {
+  const trimmed = String(rawUrl || '').trim();
+  if (!trimmed || trimmed === 'about:blank') {
+    return 'about:blank';
+  }
+
+  try {
+    return new URL(trimmed).href;
+  } catch (_error) {
+    // Prepend https if no protocol is given.
+    try {
+      return new URL(`https://${trimmed}`).href;
+    } catch (_err) {
+      return 'about:blank';
+    }
+  }
 }
 
 async function createGameTab(options = {}) {
@@ -2192,6 +2263,7 @@ async function createGameTab(options = {}) {
   }
 
   const page = await browserContext.newPage();
+  const resolvedUrl = normalizeTabUrl(options.url);
   const tab = createTabRecord(page, {
     label: options.label,
     pausedAll: options.pausedAll,
@@ -2200,26 +2272,35 @@ async function createGameTab(options = {}) {
 
   emitState();
 
-  try {
-    await page.goto(options.url || GAME_URL, {
-      waitUntil: 'domcontentloaded',
-      timeout: 45000,
-    });
-    await waitForPageReady(page);
+  if (resolvedUrl !== 'about:blank') {
+    try {
+      await page.goto(resolvedUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: 45000,
+      });
+      await waitForPageReady(page);
+      addLog({
+        tabId: tab.id,
+        tabLabel: tab.label,
+        action: 'tab.open',
+        message: `${tab.label}: opened ${resolvedUrl}`,
+      });
+    } catch (error) {
+      addLog({
+        level: 'error',
+        tabId: tab.id,
+        tabLabel: tab.label,
+        action: 'tab.open',
+        result: 'error',
+        message: `${tab.label}: failed to open ${resolvedUrl} (${error.message})`,
+      });
+    }
+  } else {
     addLog({
       tabId: tab.id,
       tabLabel: tab.label,
       action: 'tab.open',
-      message: `${tab.label}: opened ${options.url || GAME_URL}`,
-    });
-  } catch (error) {
-    addLog({
-      level: 'error',
-      tabId: tab.id,
-      tabLabel: tab.label,
-      action: 'tab.open',
-      result: 'error',
-      message: `${tab.label}: failed to open ${options.url || GAME_URL} (${error.message})`,
+      message: `${tab.label}: opened blank tab`,
     });
   }
 
@@ -2356,6 +2437,24 @@ function bindSocketHandlers() {
   io.on('connection', (socket) => {
     emitState(socket);
     socket.emit('logs:bootstrap', logs);
+
+    socket.on('tab:close', async (payload, callback) => {
+      try {
+        const tabId = payload && Number(payload.tabId);
+        const tab = getTabOrThrow(tabId);
+        await tab.page.close().catch(() => {});
+        removeTab(tab.id, 'closed by controller');
+        if (typeof callback === 'function') {
+          callback({ ok: true });
+        }
+      } catch (error) {
+        const message = error.message || 'Failed to close tab.';
+        addLog({ level: 'error', action: 'tab.close.error', message: `Close tab failed: ${message}` });
+        if (typeof callback === 'function') {
+          callback({ ok: false, error: message });
+        }
+      }
+    });
 
     socket.on('tab:create', async (payload, callback) => {
       try {

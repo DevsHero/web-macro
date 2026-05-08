@@ -23,12 +23,16 @@
     },
   };
   const STEP_COMMAND_OPTIONS = [
-    { value: 'keyboard', label: 'Keyboard' },
+    { value: 'keyboard', label: 'Keyboard Key' },
+    { value: 'type', label: 'Type Text' },
     { value: 'click', label: 'Mouse Click' },
+    { value: 'hover', label: 'Mouse Hover' },
+    { value: 'scroll', label: 'Scroll' },
     { value: 'wait', label: 'Wait' },
+    { value: 'navigate', label: 'Navigate to URL' },
     { value: 'move', label: 'Mouse Move' },
     { value: 'focus', label: 'Focus Target' },
-    { value: 'bringToFront', label: 'Bring Tab Front' },
+    { value: 'bringToFront', label: 'Bring Tab to Front' },
   ];
   const BROWSER_OPTIONS = [
     { value: 'chromium', label: 'Playwright Chromium' },
@@ -173,6 +177,10 @@
     browserOptimizeForHiddenExecutionInput: document.getElementById('browserOptimizeForHiddenExecutionInput'),
     cancelBrowserButton: document.getElementById('cancelBrowserButton'),
     saveBrowserButton: document.getElementById('saveBrowserButton'),
+    addTabModal: document.getElementById('addTabModal'),
+    addTabUrlInput: document.getElementById('addTabUrlInput'),
+    cancelAddTabButton: document.getElementById('cancelAddTabButton'),
+    confirmAddTabButton: document.getElementById('confirmAddTabButton'),
   };
 
   const socket = io({
@@ -333,6 +341,41 @@
           delayBeforeMs: 0,
           delayAfterMs: 0,
         };
+      case 'type':
+        return {
+          id,
+          command: 'type',
+          text: '',
+          clearFirst: false,
+          typingDelayMs: 0,
+          delayBeforeMs: 0,
+          delayAfterMs: 0,
+        };
+      case 'scroll':
+        return {
+          id,
+          command: 'scroll',
+          deltaX: 0,
+          deltaY: 120,
+          delayBeforeMs: 0,
+          delayAfterMs: 0,
+        };
+      case 'navigate':
+        return {
+          id,
+          command: 'navigate',
+          url: '',
+          delayBeforeMs: 0,
+          delayAfterMs: 0,
+        };
+      case 'hover':
+        return {
+          id,
+          command: 'hover',
+          position: createDefaultPosition(),
+          delayBeforeMs: 0,
+          delayAfterMs: 0,
+        };
       default:
         return {
           id,
@@ -349,7 +392,7 @@
     const command = (step && step.command) || 'keyboard';
     const hydrated = Object.assign(createDefaultStep(command), clone(step || {}));
 
-    if (command === 'click' || command === 'move') {
+    if (command === 'click' || command === 'move' || command === 'hover') {
       hydrated.position = step && step.position && step.position.useTabDefault
         ? { useTabDefault: true }
         : Object.assign(createDefaultPosition(), clone((step && step.position) || {}));
@@ -499,7 +542,7 @@
       ? 'inline-flex items-center justify-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-200'
       : 'inline-flex items-center justify-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-4 py-2 text-sm text-amber-100';
     elements.addTabButton.disabled = state.addingTab || !state.connected;
-    elements.addTabButton.textContent = state.addingTab ? 'Opening Tab...' : 'Add New Game Tab';
+    elements.addTabButton.textContent = state.addingTab ? 'Opening Tab...' : 'Add New Tab';
   }
 
   function renderStats() {
@@ -602,6 +645,7 @@
             <div class="flex flex-wrap gap-2 lg:justify-end">
               <button type="button" data-action="add-workflow" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-2 text-sm font-semibold text-teal-100 transition hover:bg-teal-300/20">Add Workflow</button>
               <button type="button" data-action="toggle-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">${tab.pausedAll ? 'Resume All' : 'Pause All'}</button>
+              <button type="button" data-action="close-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-300/20">Close Tab</button>
             </div>
           </div>
           <div class="grid gap-3 text-xs text-slate-400 md:grid-cols-3">
@@ -786,6 +830,53 @@
       return '<p class="text-sm text-slate-400">No extra fields. This step only activates the target browser tab when tab activation is enabled in Browser Settings.</p>';
     }
 
+    if (step.command === 'type') {
+      return `
+        <div class="space-y-3">
+          <label class="block">
+            <span class="mb-2 block text-[11px] uppercase tracking-[0.22em] text-slate-500">Text to Type</span>
+            <textarea rows="3" data-step-id="${escapeHtml(step.id)}" data-field="text" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white font-mono" placeholder="Hello, World!">${escapeHtml(step.text || '')}</textarea>
+          </label>
+          <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label class="block">
+              <span class="mb-2 block text-[11px] uppercase tracking-[0.22em] text-slate-500">Keystroke Delay (ms)</span>
+              <input type="number" min="0" step="1" value="${escapeHtml(step.typingDelayMs || 0)}" data-step-id="${escapeHtml(step.id)}" data-field="typingDelayMs" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white" />
+            </label>
+            <label class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+              <input type="checkbox" ${step.clearFirst ? 'checked' : ''} data-step-id="${escapeHtml(step.id)}" data-field="clearFirst" class="h-4 w-4 rounded border-white/20 bg-slate-900 text-teal-300" />
+              Clear field first (Ctrl+A, Delete)
+            </label>
+          </div>
+        </div>
+      `;
+    }
+
+    if (step.command === 'scroll') {
+      return `
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <label class="block">
+            <span class="mb-2 block text-[11px] uppercase tracking-[0.22em] text-slate-500">Scroll Down (+) / Up (−) &middot; px</span>
+            <input type="number" step="1" value="${escapeHtml(step.deltaY !== undefined ? step.deltaY : 120)}" data-step-id="${escapeHtml(step.id)}" data-field="deltaY" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white" />
+          </label>
+          <label class="block">
+            <span class="mb-2 block text-[11px] uppercase tracking-[0.22em] text-slate-500">Scroll Right (+) / Left (−) &middot; px</span>
+            <input type="number" step="1" value="${escapeHtml(step.deltaX || 0)}" data-step-id="${escapeHtml(step.id)}" data-field="deltaX" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white" />
+          </label>
+        </div>
+      `;
+    }
+
+    if (step.command === 'navigate') {
+      return `
+        <div class="grid gap-3 md:grid-cols-2">
+          <label class="block">
+            <span class="mb-2 block text-[11px] uppercase tracking-[0.22em] text-slate-500">URL</span>
+            <input type="url" value="${escapeHtml(step.url || '')}" data-step-id="${escapeHtml(step.id)}" data-field="url" placeholder="https://example.com" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white" />
+          </label>
+        </div>
+      `;
+    }
+
     const usesTabDefault = step.position && step.position.useTabDefault;
     const position = usesTabDefault ? { useTabDefault: true } : Object.assign(createDefaultPosition(), step.position || {});
     const extraField = step.command === 'click'
@@ -802,6 +893,8 @@
           <input type="number" min="1" step="1" value="${escapeHtml(step.clickCount || 1)}" data-step-id="${escapeHtml(step.id)}" data-field="clickCount" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white" />
         </label>
       `
+      : step.command === 'hover'
+      ? ''
       : `
         <label class="block">
           <span class="mb-2 block text-[11px] uppercase tracking-[0.22em] text-slate-500">Duration (ms)</span>
@@ -1020,6 +1113,35 @@
             y: step.position.mode === 'custom' ? toNumber(step.position.y, 0) : undefined,
           },
         };
+      case 'type':
+        return {
+          ...base,
+          text: step.text || '',
+          clearFirst: Boolean(step.clearFirst),
+          typingDelayMs: Math.max(0, toNumber(step.typingDelayMs, 0)),
+        };
+      case 'scroll':
+        return {
+          ...base,
+          deltaX: toNumber(step.deltaX, 0),
+          deltaY: toNumber(step.deltaY, 120),
+        };
+      case 'navigate':
+        return {
+          ...base,
+          url: step.url || '',
+        };
+      case 'hover':
+        return {
+          ...base,
+          position: step.position && step.position.useTabDefault ? { useTabDefault: true } : {
+            coordinateSystem: step.position.coordinateSystem,
+            mode: step.position.mode,
+            preset: step.position.preset,
+            x: step.position.mode === 'custom' ? toNumber(step.position.x, 0) : undefined,
+            y: step.position.mode === 'custom' ? toNumber(step.position.y, 0) : undefined,
+          },
+        };
       case 'focus':
         return {
           ...base,
@@ -1050,9 +1172,15 @@
       if (step.command === 'wait' && toNumber(step.durationMs, -1) < 0) {
         return 'Wait duration must be greater than or equal to 0.';
       }
-      if ((step.command === 'click' || step.command === 'move') && !(step.position && step.position.useTabDefault)) {
+      if (step.command === 'navigate' && !step.url) {
+        return 'Navigate steps require a URL.';
+      }
+      if (step.command === 'type' && !step.text) {
+        return 'Type Text steps require non-empty text.';
+      }
+      if (step.command === 'hover' && !(step.position && step.position.useTabDefault)) {
         if (!step.position || !step.position.coordinateSystem || !step.position.mode) {
-          return 'Mouse steps require a valid position.';
+          return 'Hover steps require a valid position.';
         }
         if (step.position.mode === 'custom' && (!Number.isFinite(toNumber(step.position.x, Number.NaN)) || !Number.isFinite(toNumber(step.position.y, Number.NaN)))) {
           return 'Custom XY requires numeric x and y values.';
@@ -1134,11 +1262,23 @@
     return state.workflowModal.draft.steps.find((step) => String(step.id) === String(stepId)) || null;
   }
 
-  elements.addTabButton.addEventListener('click', async () => {
+  elements.addTabButton.addEventListener('click', () => {
+    elements.addTabUrlInput.value = '';
+    elements.addTabModal.classList.remove('hidden');
+    elements.addTabUrlInput.focus();
+  });
+
+  elements.cancelAddTabButton.addEventListener('click', () => {
+    elements.addTabModal.classList.add('hidden');
+  });
+
+  elements.confirmAddTabButton.addEventListener('click', async () => {
+    const url = elements.addTabUrlInput.value.trim();
+    elements.addTabModal.classList.add('hidden');
     state.addingTab = true;
     renderConnectionState();
 
-    const response = await emitWithAck('tab:create', {});
+    const response = await emitWithAck('tab:create', { url: url || '' });
     state.addingTab = false;
     renderConnectionState();
 
@@ -1147,7 +1287,15 @@
       return;
     }
 
-    flash('New game tab opened.', 'success');
+    flash('New tab opened.', 'success');
+  });
+
+  elements.addTabModal.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      elements.confirmAddTabButton.click();
+    } else if (event.key === 'Escape') {
+      elements.cancelAddTabButton.click();
+    }
   });
 
   elements.toggleLogsButton.addEventListener('click', () => {
@@ -1394,6 +1542,18 @@
         return;
       }
       flash('Workflow removed.', 'success');
+    }
+
+    if (action === 'close-tab') {
+      if (!window.confirm('Close this tab and remove all its workflows?')) {
+        return;
+      }
+      const response = await emitWithAck('tab:close', { tabId: Number(tabId) });
+      if (!response.ok) {
+        flash(response.error || 'Failed to close tab.');
+        return;
+      }
+      flash('Tab closed.', 'success');
     }
   });
 
