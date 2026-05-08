@@ -2625,10 +2625,10 @@ async function start() {
   });
 
   server.listen(PORT, () => {
-    console.log(`Multi-Tab Macro Controller is running at http://localhost:${PORT}`);
+    console.log(`web-macro is running at http://localhost:${PORT}`);
     console.log(`Browser session mode: ${buildBrowserSummary().summary}`);
     console.log(`Browser runtime: ${browserRuntime.name}${browserRuntime.executablePath ? ` (${browserRuntime.executablePath})` : ''}`);
-    addLog({ action: 'controller.ready', message: `Controller ready at http://localhost:${PORT}` });
+    addLog({ action: 'controller.ready', message: `web-macro ready at http://localhost:${PORT}` });
     addLog({ action: 'browser.runtime', message: `Browser runtime: ${browserRuntime.name}` });
     emitState();
   });
