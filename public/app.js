@@ -72,7 +72,6 @@
     connected: false,
     addingTab: false,
     logsVisible: false,
-    logsExpanded: false,
     logStickToBottom: true,
     selectedConfigId: '',
     logFilters: {
@@ -103,6 +102,9 @@
       open: false,
       draft: null,
     },
+    renderCache: {
+      tabsSignature: '',
+    },
   };
 
   const elements = {
@@ -110,7 +112,6 @@
     addTabButton: document.getElementById('addTabButton'),
     openConfigModalButton: document.getElementById('openConfigModalButton'),
     toggleLogsButton: document.getElementById('toggleLogsButton'),
-    expandLogsButton: document.getElementById('expandLogsButton'),
     openBrowserSettingsButton: document.getElementById('openBrowserSettingsButton'),
     connectionPill: document.getElementById('connectionPill'),
     connectionText: document.getElementById('connectionText'),
@@ -595,6 +596,52 @@
       : 'No configs yet';
   }
 
+  function normalizedTabsForRender(tabs) {
+    return tabs.map((tab) => ({
+      id: tab.id,
+      label: tab.label,
+      url: tab.url,
+      pausedAll: Boolean(tab.pausedAll),
+      browserInfo: {
+        summary: tab.browserInfo && tab.browserInfo.summary,
+        profileLabel: tab.browserInfo && tab.browserInfo.profileLabel,
+      },
+      workflows: (tab.workflows || []).map((workflow) => ({
+        id: workflow.id,
+        sortOrder: workflow.sortOrder,
+        name: workflow.name,
+        status: workflow.status,
+        pauseReason: workflow.pauseReason,
+        intervalSeconds: workflow.intervalSeconds,
+        description: workflow.description,
+        tabActivationPolicy: workflow.tabActivationPolicy,
+        overlapPolicy: workflow.overlapPolicy,
+        queuedRuns: workflow.queuedRuns,
+        stepCount: (workflow.steps || []).length,
+      })),
+    }));
+  }
+
+  function tabsRenderSignature(tabs) {
+    return JSON.stringify(normalizedTabsForRender(tabs));
+  }
+
+  function captureTabScrollPositions() {
+    return new Map(
+      Array.from(elements.tabsGrid.querySelectorAll('[data-tab-card]'))
+        .map((card) => [String(card.dataset.tabId), card.scrollTop])
+    );
+  }
+
+  function restoreTabScrollPositions(scrollPositions) {
+    elements.tabsGrid.querySelectorAll('[data-tab-card]').forEach((card) => {
+      const savedScrollTop = scrollPositions.get(String(card.dataset.tabId));
+      if (typeof savedScrollTop === 'number') {
+        card.scrollTop = savedScrollTop;
+      }
+    });
+  }
+
   function renderWorkflowRow(tab, workflow) {
     const badge = statusMeta(workflow);
     const actionDisabled = workflow.pauseReason === 'tab';
@@ -606,33 +653,33 @@
         : 'border border-amber-300/20 bg-amber-300/10 text-amber-100 hover:bg-amber-300/20';
 
     return `
-      <div class="group relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-gradient-to-br from-white/6 via-slate-900/70 to-black/25 p-4 shadow-[0_18px_50px_rgba(2,6,23,0.28)] transition hover:border-teal-300/20 hover:shadow-[0_24px_60px_rgba(17,24,39,0.42)]">
+      <div class="group relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-gradient-to-br from-white/6 via-slate-900/70 to-black/25 p-4 shadow-[0_18px_50px_rgba(2,6,23,0.28)] transition hover:border-teal-300/20 hover:shadow-[0_24px_60px_rgba(17,24,39,0.42)]" data-workflow-row data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}">
         <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(45,212,191,0.12),transparent_38%)] opacity-70"></div>
-        <div class="relative flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div class="relative flex flex-col gap-3">
           <div class="min-w-0 space-y-2">
             <div class="flex flex-wrap items-center gap-2">
               <span class="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">#${escapeHtml(workflow.sortOrder || 1)}</span>
               <h3 class="truncate text-base font-semibold text-white">${escapeHtml(workflow.name)}</h3>
-              <span class="rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${badge.classes}">${escapeHtml(badge.label)}</span>
+              <span class="rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${badge.classes}" data-runtime-role="status">${escapeHtml(badge.label)}</span>
               <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">Every ${escapeHtml(workflow.intervalSeconds)}s</span>
               <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">${escapeHtml(workflowActivationLabel(workflow))}</span>
               <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">${escapeHtml(overlapPolicyLabel(workflow))}</span>
               ${workflow.queuedRuns > 0 ? `<span class="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-amber-100">Queued ${escapeHtml(workflow.queuedRuns)}</span>` : ''}
             </div>
             <div class="flex flex-wrap gap-3 text-xs text-slate-400">
-              <span>Next ${escapeHtml(formatCountdown(workflow.remainingSeconds))}</span>
-              <span>Last ${escapeHtml(formatClock(workflow.lastRunAt))}</span>
-              <span>Runs ${escapeHtml(workflow.runCount)}</span>
-              <span>Errors ${escapeHtml(workflow.errorCount)}</span>
+              <span data-runtime-role="next">Next ${escapeHtml(formatCountdown(workflow.remainingSeconds))}</span>
+              <span data-runtime-role="last">Last ${escapeHtml(formatClock(workflow.lastRunAt))}</span>
+              <span data-runtime-role="runs">Runs ${escapeHtml(workflow.runCount)}</span>
+              <span data-runtime-role="errors">Errors ${escapeHtml(workflow.errorCount)}</span>
             </div>
             <p class="text-xs text-slate-500">${workflow.description ? escapeHtml(workflow.description) : `${workflow.steps.length} steps configured`}</p>
           </div>
-          <div class="grid gap-2 sm:grid-cols-2 xl:w-[15rem]">
-            <button type="button" data-action="run-workflow-once" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/20">Run Once</button>
-            <button type="button" data-action="toggle-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" ${actionDisabled ? 'disabled' : ''} class="rounded-2xl px-3 py-2 text-xs font-semibold transition ${toggleClasses}">${toggleLabel}</button>
-            <button type="button" data-action="edit-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Edit</button>
-            <button type="button" data-action="duplicate-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">Duplicate</button>
-            <button type="button" data-action="remove-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-rose-300/20 bg-rose-300/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-300/20">Remove</button>
+          <div class="flex flex-wrap gap-2" style="align-self: stretch;">
+            <button type="button" data-action="run-workflow-once" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/20" style="flex: 1 1 6.5rem;">Run Once</button>
+            <button type="button" data-action="toggle-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" ${actionDisabled ? 'disabled' : ''} class="rounded-2xl px-3 py-2 text-xs font-semibold transition ${toggleClasses}" style="flex: 1 1 6.5rem;">${toggleLabel}</button>
+            <button type="button" data-action="edit-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10" style="flex: 1 1 6.5rem;">Edit</button>
+            <button type="button" data-action="duplicate-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10" style="flex: 1 1 6.5rem;">Duplicate</button>
+            <button type="button" data-action="remove-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-rose-300/20 bg-rose-300/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-300/20" style="flex: 1 1 6.5rem;">Remove</button>
           </div>
         </div>
       </div>
@@ -645,8 +692,8 @@
       : 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100';
 
     return `
-      <article class="rounded-[2rem] border border-white/10 bg-slate-900/75 p-5 shadow-[0_24px_60px_rgba(2,6,23,0.34)] backdrop-blur">
-        <div class="flex flex-col gap-4 border-b border-white/10 pb-5">
+      <article class="terminal-scroll flex flex-col overflow-x-hidden overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-900/75 p-5 shadow-[0_24px_60px_rgba(2,6,23,0.34)] backdrop-blur" data-tab-card data-tab-id="${escapeHtml(tab.id)}" style="height: 500px;">
+        <div class="shrink-0 flex flex-col gap-4 border-b border-white/10 pb-5">
           <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div class="space-y-2">
               <div class="flex flex-wrap items-center gap-2">
@@ -697,8 +744,47 @@
 
   function renderTabs() {
     const tabs = state.snapshot.tabs || [];
+    const nextSignature = tabsRenderSignature(tabs);
     elements.emptyState.classList.toggle('hidden', tabs.length > 0);
+
+    if (state.renderCache.tabsSignature === nextSignature) {
+      return false;
+    }
+
+    const scrollPositions = captureTabScrollPositions();
+    state.renderCache.tabsSignature = nextSignature;
     elements.tabsGrid.innerHTML = tabs.map((tab) => renderTabCard(tab)).join('');
+    restoreTabScrollPositions(scrollPositions);
+    return true;
+  }
+
+  function syncTabRuntimeMetrics() {
+    (state.snapshot.tabs || []).forEach((tab) => {
+      (tab.workflows || []).forEach((workflow) => {
+        const row = elements.tabsGrid.querySelector(`[data-workflow-row][data-tab-id="${CSS.escape(String(tab.id))}"][data-workflow-id="${CSS.escape(String(workflow.id))}"]`);
+        if (!row) {
+          return;
+        }
+
+        const nextNode = row.querySelector('[data-runtime-role="next"]');
+        const lastNode = row.querySelector('[data-runtime-role="last"]');
+        const runsNode = row.querySelector('[data-runtime-role="runs"]');
+        const errorsNode = row.querySelector('[data-runtime-role="errors"]');
+
+        if (nextNode) {
+          nextNode.textContent = `Next ${formatCountdown(workflow.remainingSeconds)}`;
+        }
+        if (lastNode) {
+          lastNode.textContent = `Last ${formatClock(workflow.lastRunAt)}`;
+        }
+        if (runsNode) {
+          runsNode.textContent = `Runs ${workflow.runCount}`;
+        }
+        if (errorsNode) {
+          errorsNode.textContent = `Errors ${workflow.errorCount}`;
+        }
+      });
+    });
   }
 
   function filteredLogs() {
@@ -752,10 +838,6 @@
     const visibleLogs = filteredLogs();
     elements.logCount.textContent = `${visibleLogs.length} visible / ${state.logs.length} total`;
     elements.toggleLogsButton.textContent = state.logsVisible ? 'Hide Logs' : 'Show Logs';
-    elements.expandLogsButton.textContent = state.logsExpanded ? 'Compact' : 'Expand';
-    elements.expandLogsButton.disabled = false;
-    elements.expandLogsButton.removeAttribute('disabled');
-    elements.logPanel.dataset.expanded = state.logsExpanded ? 'true' : 'false';
     elements.logsBodyWrapper.classList.toggle('hidden', !state.logsVisible);
     elements.dashboardMain.style.paddingBottom = '6rem';
 
@@ -1322,19 +1404,7 @@
     state.logsVisible = !state.logsVisible;
     if (state.logsVisible) {
       state.logStickToBottom = true;
-    } else {
-      state.logsExpanded = false;
     }
-    renderLogs();
-  });
-
-  elements.expandLogsButton.addEventListener('click', () => {
-    if (!state.logsVisible) {
-      state.logsVisible = true;
-      state.logStickToBottom = true;
-    }
-
-    state.logsExpanded = !state.logsExpanded;
     renderLogs();
   });
 
@@ -1881,17 +1951,25 @@
 
   socket.on('connect', () => {
     state.connected = true;
-    renderDashboard();
+    renderConnectionState();
   });
 
   socket.on('disconnect', () => {
     state.connected = false;
-    renderDashboard();
+    renderConnectionState();
   });
 
   socket.on('state:snapshot', (snapshot) => {
     state.snapshot = snapshot;
-    renderDashboard();
+    renderStats();
+    renderSavedConfigControls();
+    const tabsChanged = renderTabs();
+    if (!tabsChanged) {
+      syncTabRuntimeMetrics();
+    }
+    if (tabsChanged) {
+      renderLogs();
+    }
   });
 
   socket.on('logs:bootstrap', (entries) => {
