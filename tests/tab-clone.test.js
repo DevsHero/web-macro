@@ -5,7 +5,7 @@ const path = require('node:path');
 const Module = require('node:module');
 const { chromium } = require('playwright');
 
-test('Clone Tab prompts for URL and copies independent workflows through the dashboard', async () => {
+test('Duplicate Tab prompts for URL and copies independent workflows through the dashboard', async () => {
   // Load the actual HTTP/socket handlers without booting the user's browser or
   // registering process shutdown handlers. This runtime has its own headless context.
   const filename = path.resolve(__dirname, '../server.js');
@@ -33,7 +33,7 @@ test('Clone Tab prompts for URL and copies independent workflows through the das
       ] });
     const dashboard = await context.newPage();
     await dashboard.goto(`http://127.0.0.1:${api.server.address().port}`);
-    await dashboard.getByRole('button', { name: 'Clone Tab', exact: true }).click();
+    await dashboard.getByRole('button', { name: 'Duplicate Tab', exact: true }).click();
     await assert.equal(await dashboard.locator('#addTabUrlInput').inputValue(), 'about:blank');
     await dashboard.locator('#addTabUrlInput').fill('http://127.0.0.1:' + api.server.address().port + '/health');
     await dashboard.locator('#confirmAddTabButton').click();

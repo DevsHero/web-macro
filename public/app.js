@@ -711,7 +711,7 @@
             <div class="flex flex-wrap gap-2 lg:justify-end">
               <button type="button" data-action="add-workflow" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-2 text-sm font-semibold text-teal-100 transition hover:bg-teal-300/20">Add Workflow</button>
               <button type="button" data-action="toggle-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">${tab.pausedAll ? 'Resume All' : 'Pause All'}</button>
-              <button type="button" data-action="clone-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10">Clone Tab</button>
+              <button type="button" data-action="clone-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10">Duplicate Tab</button>
               <button type="button" data-action="close-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-300/20">Close Tab</button>
             </div>
           </div>
@@ -1415,9 +1415,9 @@
   function openAddTabModal(source = null) {
     if (state.addingTab) return;
     cloneSourceTabId = source ? Number(source.id) : null;
-    document.getElementById('addTabModalTitle').textContent = source ? `Clone ${source.name || source.label}` : 'Open a URL in a new tab';
+    document.getElementById('addTabModalTitle').textContent = source ? `Duplicate ${source.name || source.label}` : 'Open a URL in a new tab';
     document.getElementById('cloneTabNotice').classList.toggle('hidden', !source);
-    elements.confirmAddTabButton.textContent = source ? 'Clone Tab' : 'Create Tab';
+    elements.confirmAddTabButton.textContent = source ? 'Duplicate Tab' : 'Create Tab';
     elements.addTabUrlInput.value = source ? source.url : '';
     const hidden = Boolean(currentBrowserConfig().headless);
     elements.addTabVisibilityNotice.textContent = hidden
@@ -1453,7 +1453,7 @@
     const response = await emitWithAck(cloning ? 'tab:clone' : 'tab:create', { url: url || '', ...(cloning ? { tabId: cloneSourceTabId } : {}) }, 60000);
     state.addingTab = false;
     elements.confirmAddTabButton.disabled = false;
-    elements.confirmAddTabButton.textContent = cloning ? 'Clone Tab' : 'Create Tab';
+    elements.confirmAddTabButton.textContent = cloning ? 'Duplicate Tab' : 'Create Tab';
     renderConnectionState();
 
     if (!response.ok) {
