@@ -9,7 +9,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "stop": "sh -c 'port=${PORT:-3005}; pids=$(lsof -tiTCP:$port -sTCP:LISTEN); [ -n \"$pids\" ] && kill -9 $pids || true'",
-    "check": "node --check server.js && node -e \"new Function(require('fs').readFileSync('public/app.js','utf8'))\" && node -e \"JSON.parse(require('fs').readFileSync('package.json','utf8'))\"",
+    "check": "node --check server.js && node --check browser-discovery.js && node -e \"new Function(require('fs').readFileSync('public/app.js','utf8'))\" && node -e \"JSON.parse(require('fs').readFileSync('package.json','utf8'))\"",
     "clean": "rm -rf user_data opera_profile .cache",
     "build:css": "tailwindcss -i ./public/input.css -o ./public/style.css --minify",
     "postinstall": "playwright install chromium && npm run build:css"
@@ -26,5 +26,8 @@
     "autoprefixer": "^10.5.0",
     "postcss": "^8.5.14",
     "tailwindcss": "^3.4.19"
+  },
+  "overrides": {
+    "qs": "^6.16.2"
   }
 }

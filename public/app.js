@@ -34,14 +34,6 @@
     { value: 'focus', label: 'Focus Target' },
     { value: 'bringToFront', label: 'Bring Tab to Front' },
   ];
-  const BROWSER_OPTIONS = [
-    { value: 'chromium', label: 'Playwright Chromium' },
-    { value: 'chrome', label: 'Google Chrome' },
-    { value: 'edge', label: 'Microsoft Edge' },
-    { value: 'opera', label: 'Opera' },
-    { value: 'opera-gx', label: 'Opera GX' },
-    { value: 'custom', label: 'Custom Executable' },
-  ];
   const LAUNCH_MODE_OPTIONS = [
     { value: 'launch', label: 'Ephemeral Context' },
     { value: 'persistent', label: 'Persistent Profile' },
@@ -98,6 +90,10 @@
       draft: null,
       mode: 'create',
     },
+    browserCatalog: [],
+    scanningBrowsers: false,
+    applyingBrowser: false,
+    browserScanMessage: '',
     browserModal: {
       open: false,
       draft: null,
@@ -109,6 +105,8 @@
 
   const elements = {
     dashboardMain: document.getElementById('dashboardMain'),
+    addTabVisibilityNotice: document.getElementById('addTabVisibilityNotice'),
+    showBrowserWindowButton: document.getElementById('showBrowserWindowButton'),
     addTabButton: document.getElementById('addTabButton'),
     openConfigModalButton: document.getElementById('openConfigModalButton'),
     toggleLogsButton: document.getElementById('toggleLogsButton'),
@@ -174,6 +172,9 @@
     closeBrowserModalButton: document.getElementById('closeBrowserModalButton'),
     browserForm: document.getElementById('browserForm'),
     browserTypeSelect: document.getElementById('browserTypeSelect'),
+    scanBrowsersButton: document.getElementById('scanBrowsersButton'),
+    browserScanStatus: document.getElementById('browserScanStatus'),
+    browserAdvancedSettings: document.getElementById('browserAdvancedSettings'),
     browserLaunchModeSelect: document.getElementById('browserLaunchModeSelect'),
     browserExecutablePathInput: document.getElementById('browserExecutablePathInput'),
     browserUserDataDirInput: document.getElementById('browserUserDataDirInput'),
@@ -451,7 +452,7 @@
     return getTemplate('simple-key-repeat') || (state.snapshot.workflowTemplates || [])[0] || null;
   }
 
-  function emitWithAck(eventName, payload) {
+  function emitWithAck(eventName, payload, timeoutMs = 15000) {
     return new Promise((resolve) => {
       if (!state.connected) {
         resolve({ ok: false, error: 'Socket is disconnected.' });
@@ -466,7 +467,7 @@
 
         settled = true;
         resolve({ ok: false, error: 'Request timed out.' });
-      }, 15000);
+      }, timeoutMs);
 
       socket.emit(eventName, payload, (response) => {
         if (settled) {
@@ -511,6 +512,7 @@
       draft,
     };
     renderBrowserModal();
+    scanBrowsers();
   }
 
   function openConfigModal() {
@@ -601,6 +603,7 @@
       id: tab.id,
       label: tab.label,
       url: tab.url,
+      navigation: tab.navigation,
       pausedAll: Boolean(tab.pausedAll),
       browserInfo: {
         summary: tab.browserInfo && tab.browserInfo.summary,
@@ -696,6 +699,8 @@
         <div class="shrink-0 flex flex-col gap-4 border-b border-white/10 pb-5">
           <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div class="space-y-2">
+              ${tab.navigation && tab.navigation.state === 'loading' ? '<p class="text-sm text-cyan-200">Loading website…</p>' : ''}
+              ${tab.navigation && tab.navigation.state === 'error' ? `<p role="status" class="text-sm text-rose-200">Website could not load: ${escapeHtml(tab.navigation.error)}</p>` : ''}
               <div class="flex flex-wrap items-center gap-2">
                 <h2 class="text-2xl font-semibold text-white">${escapeHtml(tab.label)}</h2>
                 <span class="rounded-full border px-3 py-1 text-xs uppercase tracking-[0.2em] ${tabBadgeClasses}">${tab.pausedAll ? 'Tab Paused' : 'Tab Active'}</span>
@@ -1133,6 +1138,45 @@
     renderWorkflowSteps();
   }
 
+  function renderBrowserPicker() {
+    const draft = state.browserModal.draft;
+    if (!draft) return;
+    const match = state.browserCatalog.find(browser => browser.type === draft.type &&
+      (!draft.executablePath || browser.executablePath === draft.executablePath));
+    const options = state.browserCatalog.map(browser => ({ value: browser.type, label: browser.name }));
+    const selected = match ? match.type : (draft.executablePath || draft.type === 'custom' ? 'custom' : '');
+    if (!selected) options.unshift({ value: '', label: 'Choose an installed browser…' });
+    options.push({ value: 'custom', label: 'Custom browser… (advanced)' });
+    elements.browserTypeSelect.innerHTML = optionsMarkup(options, selected);
+    elements.scanBrowsersButton.disabled = state.scanningBrowsers || state.applyingBrowser;
+    elements.scanBrowsersButton.textContent = state.scanningBrowsers ? 'Scanning…' : 'Scan again';
+    elements.browserScanStatus.textContent = state.browserScanMessage;
+    elements.saveBrowserButton.disabled = state.scanningBrowsers;
+    elements.browserExecutablePathInput.readOnly = selected !== 'custom';
+  }
+
+  async function scanBrowsers() {
+    if (state.scanningBrowsers || state.applyingBrowser) return;
+    const modal = state.browserModal;
+    state.scanningBrowsers = true;
+    state.browserScanMessage = 'Looking for installed browsers…';
+    renderBrowserPicker();
+    try {
+      const response = await fetch('/api/browsers', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+      if (!response.ok) throw new Error('Browser scan failed.');
+      const catalog = await response.json();
+      state.browserCatalog = catalog.browsers;
+      state.browserScanMessage = catalog.browsers.length
+        ? `Found ${catalog.browsers.length} installed browser${catalog.browsers.length === 1 ? '' : 's'}. Select one and apply — no path needed.`
+        : 'No supported browsers found. Install Chrome, Edge, Brave, Chromium or Opera, then scan again. For a portable install, use Custom browser.';
+    } catch (_) {
+      state.browserScanMessage = 'Could not scan browsers. Try Scan again, or use Custom browser in Advanced settings.';
+    } finally {
+      state.scanningBrowsers = false;
+      if (state.browserModal === modal) renderBrowserPicker();
+    }
+  }
+
   function renderBrowserModal() {
     const modalState = state.browserModal;
     elements.browserModal.classList.toggle('hidden', !modalState.open);
@@ -1141,7 +1185,8 @@
       return;
     }
 
-    elements.browserTypeSelect.innerHTML = optionsMarkup(BROWSER_OPTIONS, modalState.draft.type || 'opera');
+    renderBrowserPicker();
+    elements.browserAdvancedSettings.open = modalState.draft.type === 'custom';
     elements.browserLaunchModeSelect.innerHTML = optionsMarkup(LAUNCH_MODE_OPTIONS, modalState.draft.launchMode || 'launch');
     elements.browserExecutablePathInput.value = modalState.draft.executablePath || '';
     elements.browserUserDataDirInput.value = modalState.draft.userDataDir || '';
@@ -1366,8 +1411,20 @@
 
   elements.addTabButton.addEventListener('click', () => {
     elements.addTabUrlInput.value = '';
+    const hidden = Boolean(currentBrowserConfig().headless);
+    elements.addTabVisibilityNotice.textContent = hidden
+      ? 'Headless mode is on. New tabs run in the background and no browser window will open.'
+      : 'New tabs open in the separate browser controlled by Web Macro.';
+    elements.showBrowserWindowButton.classList.toggle('hidden', !hidden);
     elements.addTabModal.classList.remove('hidden');
     elements.addTabUrlInput.focus();
+  });
+
+  elements.showBrowserWindowButton.addEventListener('click', () => {
+    elements.addTabModal.classList.add('hidden');
+    openBrowserModal();
+    elements.browserHeadlessInput.checked = false;
+    state.browserModal.draft.headless = false;
   });
 
   elements.cancelAddTabButton.addEventListener('click', () => {
@@ -1375,13 +1432,17 @@
   });
 
   elements.confirmAddTabButton.addEventListener('click', async () => {
+    if (state.addingTab || !state.connected) return;
     const url = elements.addTabUrlInput.value.trim();
-    elements.addTabModal.classList.add('hidden');
     state.addingTab = true;
+    elements.confirmAddTabButton.disabled = true;
+    elements.confirmAddTabButton.textContent = 'Creating…';
     renderConnectionState();
 
-    const response = await emitWithAck('tab:create', { url: url || '' });
+    const response = await emitWithAck('tab:create', { url: url || '' }, 60000);
     state.addingTab = false;
+    elements.confirmAddTabButton.disabled = false;
+    elements.confirmAddTabButton.textContent = 'Create Tab';
     renderConnectionState();
 
     if (!response.ok) {
@@ -1389,7 +1450,8 @@
       return;
     }
 
-    flash('New tab opened.', 'success');
+    elements.addTabModal.classList.add('hidden');
+    flash(currentBrowserConfig().headless ? 'Tab created in the background (headless mode).' : 'Tab created in the browser window. The website may still be loading.', 'success');
   });
 
   elements.addTabModal.addEventListener('keydown', (event) => {
@@ -1915,6 +1977,22 @@
     renderWorkflowModal();
   });
 
+  elements.scanBrowsersButton.addEventListener('click', scanBrowsers);
+  elements.browserTypeSelect.addEventListener('change', () => {
+    const selected = state.browserCatalog.find(browser => browser.type === elements.browserTypeSelect.value);
+    if (selected) {
+      state.browserModal.draft.type = selected.type;
+      state.browserModal.draft.executablePath = selected.executablePath;
+      elements.browserExecutablePathInput.value = selected.executablePath;
+      elements.browserExecutablePathInput.readOnly = true;
+    } else if (elements.browserTypeSelect.value === 'custom') {
+      state.browserModal.draft.type = 'custom';
+      elements.browserExecutablePathInput.readOnly = false;
+      elements.browserAdvancedSettings.open = true;
+      elements.browserExecutablePathInput.focus();
+    }
+  });
+
   elements.closeBrowserModalButton.addEventListener('click', () => {
     closeBrowserModal();
   });
@@ -1926,6 +2004,16 @@
   elements.browserForm.addEventListener('submit', async (event) => {
     event.preventDefault();
 
+    if (state.scanningBrowsers || elements.saveBrowserButton.disabled) return;
+    if (!elements.browserTypeSelect.value) {
+      flash('Choose an installed browser or Custom browser first.');
+      return;
+    }
+    if (elements.browserTypeSelect.value === 'custom' && !elements.browserExecutablePathInput.value.trim() && elements.browserLaunchModeSelect.value !== 'connectOverCDP') {
+      elements.browserAdvancedSettings.open = true;
+      flash('Enter a custom browser path, or select an installed browser.');
+      return;
+    }
     const payload = {
       type: elements.browserTypeSelect.value,
       launchMode: elements.browserLaunchModeSelect.value,
@@ -1939,14 +2027,22 @@
       optimizeForHiddenExecution: elements.browserOptimizeForHiddenExecutionInput.checked,
     };
 
+    state.applyingBrowser = true;
+    elements.scanBrowsersButton.disabled = true;
+    elements.saveBrowserButton.disabled = true;
+    elements.saveBrowserButton.textContent = 'Applying…';
     const response = await emitWithAck('browser:update', payload);
+    state.applyingBrowser = false;
+    elements.scanBrowsersButton.disabled = false;
+    elements.saveBrowserButton.disabled = false;
+    elements.saveBrowserButton.textContent = 'Apply Browser Settings';
     if (!response.ok) {
       flash(response.error || 'Failed to apply browser settings.');
       return;
     }
 
     closeBrowserModal();
-    flash('Browser settings applied to the dev controller.', 'success');
+    flash('Browser ready. Use Add New Tab to create a tab.', 'success');
   });
 
   socket.on('connect', () => {
