@@ -1,3 +1,4 @@
+const { discoverBrowsers } = require('../browser-discovery');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const { once } = require('node:events');
@@ -55,7 +56,7 @@ before(async () => {
   }).listen(0, '127.0.0.1');
   await once(server, 'listening');
   origin = `http://127.0.0.1:${server.address().port}`;
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, executablePath: discoverBrowsers()[0]?.executablePath });
 });
 
 after(async () => {

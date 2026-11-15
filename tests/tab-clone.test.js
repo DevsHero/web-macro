@@ -1,3 +1,4 @@
+const { discoverBrowsers } = require('../browser-discovery');
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const fs = require('node:fs');
@@ -18,7 +19,7 @@ test('Duplicate Tab prompts for URL and copies independent workflows through the
       setContext(context) { browserContext = context; isBrowserContextClosed = false; browserConfigState.headless = true; }
     };`, filename);
   const api = runtime.exports;
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, executablePath: discoverBrowsers()[0]?.executablePath });
   try {
     const context = await browser.newContext();
     api.setContext(context);

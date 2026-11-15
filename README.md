@@ -18,6 +18,13 @@ web-macro is a production-focused browser macro controller for games and browser
 npm install
 ```
 
+The installer reuses detected Chrome, Edge, Brave, Chromium or Opera (or an
+existing Playwright Chromium bundle) before attempting a browser download.
+This lets Ubuntu 26.04 use an installed browser even when Playwright's bundled
+Chromium downloader does not support that OS. If no browser is available and
+the download fails, install one of these browsers, then rerun `npm install`.
+No browser is installed system-wide by this project.
+
 2. Start the controller on the default port:
 
 ```bash
@@ -38,7 +45,7 @@ http://localhost:3005
 - `npm run dev`: start the controller without changing behavior from `start`.
 - `npm run stop`: kill listeners on `PORT` or default `3005`.
 - `npm run check`: syntax-check the browser input module, server, client app, and manifest.
-- `npm test`: run headless keyboard and chat regression tests (`npx playwright install chromium --only-shell` if needed).
+- `npm test`: run headless browser regression tests using a detected installed browser.
 - `npm run clean`: remove local runtime caches and generated browser profile data.
 
 ## Project Structure
