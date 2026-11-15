@@ -115,7 +115,7 @@ test('Duplicate Tab prompts for URL and copies independent workflows through the
     await dashboard.locator('#cancelAddTabButton').click();
     await card.getByRole('button', { name: 'Pause All', exact: true }).click();
     await card.getByRole('button', { name: 'Resume All', exact: true }).waitFor();
-    const sequenced = await api.createGameTab({ url: 'about:blank', resumeWorkflows: true, workflows: [
+    const sequenced = await api.createGameTab({ url: 'about:blank', pausedAll: true, resumeWorkflows: true, workflows: [
       { name: 'Bottom', sortOrder: 2, enabled: true, intervalSeconds: 1, steps: [{ command: 'wait', durationMs: 80 }] },
       { name: 'Top', sortOrder: 1, enabled: true, intervalSeconds: 2, steps: [{ command: 'wait', durationMs: 80 }] },
       { name: 'Skipped', sortOrder: 3, enabled: false, intervalSeconds: 1, steps: [{ command: 'wait', durationMs: 80 }] },
@@ -125,6 +125,10 @@ test('Duplicate Tab prompts for URL and copies independent workflows through the
     await seqCard.getByRole('button', { name: 'Mode: Sequence', exact: true }).waitFor();
     const sequenceTab = api.tabs.get(sequenced.id);
     assert.equal(api.serializeTabForConfig(sequenceTab).executionMode, 'sequence');
+    // Do not count interval runs that can fire before a slow UI mode switch.
+    await seqCard.getByRole('button', { name: 'Resume All', exact: true }).click();
+    // Resume All intentionally enables every workflow; keep this entry skipped.
+    await seqCard.locator('[data-workflow-row]').filter({ hasText: 'Skipped' }).getByRole('button', { name: 'Pause', exact: true }).click();
     const deadline = Date.now() + 10000;
     const starts = () => api.logs.filter(log => log.tabId === sequenced.id && log.action === 'workflow.start');
     while (starts().length < 4 && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));

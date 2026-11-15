@@ -7,7 +7,7 @@ This project is prepared as a production-oriented local operations tool, not a C
 ## Applied Practices
 
 - default runtime isolated to port `3005`
-- target-port kill behavior scoped only to the chosen port
+- portable graceful shutdown restricted to this checkout’s token-authorized controller
 - portable JSON config storage
 - capped in-memory logging
 - cache-aware static asset serving
@@ -100,3 +100,9 @@ These are optional follow-ups for a later phase:
 
 CI/CD is intentionally not included in the current scope.
 The codebase and docs are organized so it can be added later without changing the runtime model.
+
+## Ubuntu follow-up
+
+See [Ubuntu Power Saving validation](UBUNTU-POWER-SAVING-VALIDATION.md) for
+source repairs, same-host measurements, sustained component checks and the
+unverified live-game/Windows boundaries.

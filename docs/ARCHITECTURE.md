@@ -126,6 +126,12 @@ Primary socket operations include:
   revalidated every lookup, including dynamically added canvases and scaled frames.
 - Dashboard updates replace changed tab cards only. Hidden dashboards/log panels
   avoid DOM rebuilds; runtime text is only changed when its value differs.
+- Graphics compatibility is reported only on state changes through a per-page
+  binding, with document revisions preventing stale reports after navigation.
+  Partial installations roll back and surface controller-only reasons. Hook
+  updates serialize so rapid toggles cannot leave graphics in the wrong mode.
+- Portable stop uses a token-authenticated loopback endpoint and an ignored local
+  launcher receipt, not a workflow store or port-based process killing.
 - Browser launch args favor reduced background throttling for hidden-screen execution.
 - Power Saving suppresses controller log creation entirely and limits visible
   dashboard delivery to one scheduled update per second. It preserves browser

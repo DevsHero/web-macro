@@ -5,14 +5,13 @@
   "description": "Production-focused multi-tab browser macro controller with workflow orchestration and JSON config portability.",
   "main": "server.js",
   "scripts": {
-    "prestart": "sh -c 'port=${PORT:-3005}; pids=$(lsof -tiTCP:$port -sTCP:LISTEN); [ -n \"$pids\" ] && kill -9 $pids || true'",
     "start": "node server.js",
     "dev": "node server.js",
-    "stop": "sh -c 'port=${PORT:-3005}; pids=$(lsof -tiTCP:$port -sTCP:LISTEN); [ -n \"$pids\" ] && kill -9 $pids || true'",
-    "test": "node --test tests/*.test.js",
+    "stop": "node scripts/stop.js",
+    "test": "node --test",
     "benchmark": "node scripts/performance-benchmark.js",
-    "check": "node --check scripts/install-browser.js && node --check lib/browser-input.js && node --check lib/runtime-publisher.js && node --check lib/config-catalog.js && node --check lib/host-scheduler.js && node --check lib/power-saving.js && node --check lib/sequence.js && node --check scripts/performance-benchmark.js && node --check server.js && node --check browser-discovery.js && node -e \"new Function(require('fs').readFileSync('public/app.js','utf8'))\" && node -e \"JSON.parse(require('fs').readFileSync('package.json','utf8'))\"",
-    "clean": "rm -rf user_data opera_profile .cache",
+    "check": "node --check lib/runtime-control.js && node --check scripts/stop.js && node --check scripts/clean.js && node --check scripts/install-browser.js && node --check lib/browser-input.js && node --check lib/runtime-publisher.js && node --check lib/config-catalog.js && node --check lib/host-scheduler.js && node --check lib/power-saving.js && node --check lib/sequence.js && node --check scripts/performance-benchmark.js && node --check server.js && node --check browser-discovery.js && node -e \"new Function(require('fs').readFileSync('public/app.js','utf8'))\" && node -e \"JSON.parse(require('fs').readFileSync('package.json','utf8'))\"",
+    "clean": "node scripts/clean.js",
     "build:css": "tailwindcss -i ./public/input.css -o ./public/style.css --minify",
     "postinstall": "node scripts/install-browser.js && npm run build:css"
   },

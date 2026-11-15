@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Module = require('node:module');
 const { chromium } = require('playwright');
+const { installPowerSaving } = require('../lib/power-saving');
 const { discoverBrowsers } = require('../browser-discovery');
 
 test('optimized canvas targeting retains trusted click/move coordinates inside a scaled iframe', async () => {
@@ -25,6 +26,7 @@ test('optimized canvas targeting retains trusted click/move coordinates inside a
       canvas.addEventListener('click', event => { window.clicked = { x: event.offsetX, y: event.offsetY, trusted: event.isTrusted }; });
       canvas.addEventListener('mousemove', event => { window.moved = { x: event.offsetX, y: event.offsetY }; });
     });
+    for (const target of page.frames()) await target.evaluate(installPowerSaving, { enabled: true });
     const position = { coordinateSystem: 'canvas', mode: 'preset', preset: 'center' };
     const tab = { defaultPosition: position };
     await api.performRobustClick(page, tab, { position, clickCount: 1, button: 'left' });
