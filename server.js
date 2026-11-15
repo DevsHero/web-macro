@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { buildCloneOptions } = require('./lib/tab-clone');
 const http = require('http');
 const path = require('path');
 
@@ -2325,6 +2326,19 @@ function bindSocketHandlers() {
         if (typeof callback === 'function') {
           callback({ ok: false, error: message });
         }
+      }
+    });
+
+    socket.on('tab:clone', async (payload, callback) => {
+      try {
+        const source = serializeTabForConfig(getTabOrThrow(payload.tabId));
+        const tab = await createGameTab(buildCloneOptions(source, payload.url));
+        addLog({ action: 'tab.clone', tabId: tab.id, message: `Cloned ${source.name} with all workflows` });
+        if (typeof callback === 'function') callback({ ok: true, result: tab });
+      } catch (error) {
+        const message = error.message || 'Failed to clone tab.';
+        addLog({ level: 'error', action: 'tab.clone.error', message });
+        if (typeof callback === 'function') callback({ ok: false, error: message });
       }
     });
 

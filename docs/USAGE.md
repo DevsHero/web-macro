@@ -23,6 +23,15 @@ http://localhost:3005
 6. Use `Run Once` for immediate validation.
 7. Leave the workflow enabled for recurring execution.
 
+## Clone a Tab
+
+Click **Clone Tab** on a tab card, enter the destination URL (prefilled with the
+source URL), then confirm **Clone Tab**. Leave the URL blank for an empty tab.
+All workflows, their order, steps, timing, notes, execution policies, and default
+target position are copied with fresh IDs and reset execution counters. The new
+tab starts paused; log in or prepare the page, then choose **Resume All**.
+The original tab and saved snapshots are unchanged.
+
 ## Workflow Scheduling Rules
 
 - Workflows on the same tab run one at a time.

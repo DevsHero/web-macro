@@ -235,8 +235,9 @@
       <div class="flex min-h-full items-center justify-center">
         <div class="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 shadow-glow backdrop-blur-xl">
           <p class="text-xs uppercase tracking-[0.28em] text-slate-500">New Managed Tab</p>
-          <h2 class="mt-2 text-xl font-semibold text-white">Open a URL in a new tab</h2>
+          <h2 id="addTabModalTitle" class="mt-2 text-xl font-semibold text-white">Open a URL in a new tab</h2>
           <p class="mt-2 text-sm text-slate-400">Any website — game, video, chat, or web app. Leave blank to open an empty tab.</p>
+          <p id="cloneTabNotice" class="hidden mt-2 text-sm text-teal-200">All workflows and target settings will be copied. The new tab starts paused; resume it when ready.</p>
           <p id="addTabVisibilityNotice" role="status" class="mt-4 text-sm text-amber-200"></p>
           <button id="showBrowserWindowButton" type="button" class="hidden mt-3 rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-3 text-sm text-teal-100">Show browser window…</button>
           <label class="mt-5 block">
