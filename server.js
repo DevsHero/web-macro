@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { createRuntimeControl } = require('./lib/runtime-control');
 const { createRuntimePublisher } = require('./lib/runtime-publisher');
 const { createConfigCatalog } = require('./lib/config-catalog');
 const { hostScheduler } = require('./lib/host-scheduler');
@@ -945,6 +946,12 @@ function serializeTab(tab) {
     url: safePageUrl(tab.page),
     navigation: tab.navigation || { state: 'ready', error: null },
     executionMode: tab.executionMode,
+    powerSavingStatus: browserConfigState.powerSaving ? {
+      graphicsFrames: [...tab.powerFrameStatuses.values()].filter(status => status.adapter === 'robrowser-screen').length,
+      controllerOnlyFrames: [...tab.powerFrameStatuses.values()].filter(status => status.adapter === 'controller-only').length,
+      pendingFrames: Math.max(0, tab.page.frames().length - tab.powerFrameStatuses.size),
+      reasons: [...new Set([...tab.powerFrameStatuses.values()].map(status => status.reason).filter(Boolean))],
+    } : null,
     defaultPosition: cloneValue(tab.defaultPosition),
     browserInfo: buildBrowserSummary(),
     workflows,
@@ -979,12 +986,20 @@ function currentPowerPolicy(tab) {
 }
 async function applyPowerFrame(tab, frame) {
   if (tab.isDisposing || tab.page.isClosed() || frame.isDetached()) return;
-  await frame.evaluate(installPowerSaving, currentPowerPolicy(tab)).catch(() => {});
+  await frame.evaluate(installPowerSaving, { ...currentPowerPolicy(tab), revision: tab.powerFrameEpochs.get(frame) || 0 }).catch(() => {});
 }
 async function configurePowerPage(tab) {
   const page = tab.page;
   if (!powerPages.has(page)) {
+    await page.exposeBinding('__webMacroReportPowerStatus', ({ frame }, status) => {
+      if (tab.isDisposing || frame.isDetached() || !status || status.enabled !== browserConfigState.powerSaving || status.revision !== (tab.powerFrameEpochs.get(frame) || 0)) return;
+      if (!['off', 'robrowser-screen', 'controller-only'].includes(status.adapter)) return;
+      tab.powerFrameStatuses.set(frame, { adapter: status.adapter, reason: typeof status.reason === 'string' ? status.reason.slice(0, 200) : null });
+      emitState();
+    });
     powerPages.add(page);
+    page.on('framedetached', frame => { tab.powerFrameEpochs.delete(frame); if (tab.powerFrameStatuses.delete(frame)) emitState(); });
+    page.on('framenavigated', frame => { tab.powerFrameEpochs.set(frame, (tab.powerFrameEpochs.get(frame) || 0) + 1); tab.powerFrameStatuses.delete(frame); });
     await page.addInitScript(installPowerSaving, { enabled: false });
     page.on('framenavigated', frame => { void applyPowerFrame(tab, frame); });
   }
@@ -999,7 +1014,9 @@ function refreshPowerPolicies() {
   powerRefreshTimer.unref();
 }
 async function setPowerSaving(enabled) {
+  const changed = browserConfigState.powerSaving !== Boolean(enabled);
   browserConfigState.powerSaving = Boolean(enabled);
+  if (changed) for (const tab of tabs.values()) tab.powerFrameStatuses.clear();
   if (browserConfigState.powerSaving) clearLogs();
   await Promise.all([...tabs.values()].map(tab => configurePowerPage(tab)));
   emitState();
@@ -1280,6 +1297,8 @@ function createTabRecord(page, options = {}) {
     createdAt: nowIso(),
     pausedAll: coerceBoolean(options.pausedAll, false),
     page,
+    powerFrameStatuses: new Map(),
+    powerFrameEpochs: new Map(),
     executionMode: options.executionMode === 'sequence' ? 'sequence' : 'interval',
     sequenceTimer: null,
     sequenceCurrentId: null,
@@ -2698,6 +2717,8 @@ function bindSocketHandlers() {
   });
 }
 
+const runtimeControl = createRuntimeControl({ app, port: PORT, root: __dirname, shutdown });
+
 async function shutdown(signal) {
   if (isShuttingDown) {
     return;
@@ -2705,6 +2726,7 @@ async function shutdown(signal) {
 
   isShuttingDown = true;
   console.log(`Shutting down controller (${signal})...`);
+  runtimeControl.close();
   runtimePublisher.close();
   clearTimeout(powerRefreshTimer);
 
@@ -2748,6 +2770,7 @@ async function start() {
   });
 
   server.listen(PORT, HOST, () => {
+    runtimeControl.started(server.address());
     console.log(`web-macro is running at http://localhost:${PORT}`);
     console.log(`Browser session mode: ${buildBrowserSummary().summary}`);
     console.log(`Browser runtime: ${browserRuntime.name}${browserRuntime.executablePath ? ` (${browserRuntime.executablePath})` : ''}`);

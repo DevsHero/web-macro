@@ -129,6 +129,9 @@ test('sequence parks without polling and wakes when a workflow is resumed', asyn
     const deadline = Date.now() + 1000;
     while (!runs && Date.now() < deadline) await wait(10);
     assert.equal(runs, 1);
+    // The run counter changes before the completion microtask parks the next deadline.
+    while (workflows.get('a').nextRunAt === null && Date.now() < deadline) await wait(10);
+    assert.ok(workflows.get('a').nextRunAt > Date.now());
     const sleeping = comparisons;
     await wait(200);
     assert.equal(comparisons, sleeping, 'long countdown uses its deadline, not a 100 ms poll');

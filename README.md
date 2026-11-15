@@ -41,12 +41,12 @@ http://localhost:3005
 
 ## Scripts
 
-- `npm run start`: start the controller on `PORT` or default `3005`, killing only that target port before boot.
+- `npm run start`: start the controller on `PORT` or default `3005`; an occupied port is reported without killing its owner.
 - `npm run dev`: start the controller without changing behavior from `start`.
-- `npm run stop`: kill listeners on `PORT` or default `3005`.
+- `npm run stop`: gracefully stop this checkout’s controller using its private local receipt; unrelated listeners are never killed.
 - `npm run check`: syntax-check the browser input module, server, client app, and manifest.
 - `npm test`: run headless browser regression tests using a detected installed browser.
-- `npm run clean`: remove local runtime caches and generated browser profile data.
+- `npm run clean`: remove the disposable `user_data` and `opera_profile` directories; keep saved snapshots and controller stop receipts.
 
 ## Project Structure
 

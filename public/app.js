@@ -627,6 +627,7 @@
       url: tab.url,
       navigation: tab.navigation,
       executionMode: tab.executionMode,
+      powerSavingStatus: tab.powerSavingStatus,
       pausedAll: Boolean(tab.pausedAll),
       browserInfo: {
         summary: tab.browserInfo && tab.browserInfo.summary,
@@ -741,6 +742,7 @@
             <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
               <p class="uppercase tracking-[0.22em] text-slate-500">Browser</p>
               <p class="mt-2 font-medium text-slate-100">${escapeHtml((tab.browserInfo && tab.browserInfo.summary) || 'No browser info')}</p>
+              ${tab.powerSavingStatus ? `<p data-power-status class="mt-2 text-cyan-200">${tab.powerSavingStatus.graphicsFrames ? 'Graphics savings active in compatible frames' : tab.powerSavingStatus.pendingFrames ? 'Checking graphics compatibility…' : 'Controller savings only'}</p>${tab.powerSavingStatus.reasons.length ? `<p class="mt-1 text-slate-400">${escapeHtml(tab.powerSavingStatus.reasons.join(' '))}</p>` : ''}` : ''}
             </div>
             <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
               <p class="uppercase tracking-[0.22em] text-slate-500">Profile / Mode</p>

@@ -60,6 +60,10 @@ offscreen texture generation, picking, network traffic and macro delays remain
 active. Input briefly restores full drawing. Turning the mode off restores the
 previous graphics settings. Generic or bundled clients without accessible modules
 receive controller savings only; their game APIs and frame loop stay unchanged.
+Each tab card reports graphics compatibility, including controller-only fallback
+reasons. Status updates are event-driven and old-document reports are ignored.
+Canvas/context replacement, context restoration and rapid toggles restore owned
+hooks before reattaching; clients that reject hooks retain controller savings.
 
 CPU scheduling is automatic. Short canvas/focus preparations share a fair queue
 with one slot per available CPU thread (including supported host/container quotas).
@@ -165,8 +169,14 @@ to restore changed settings and workflows.
 The installer checks for an available supported browser before downloading
 Chromium. On Ubuntu 26.04, install Chrome, Brave or another supported browser
 using your OS installer, then run `npm ci` normally. Browser tests reuse the
-same detected executable. The local service starts Node directly; the upstream npm start/stop
-scripts kill listeners on the selected port.
+same detected executable. `npm start`, `npm stop` and `npm run clean` use Node
+without POSIX shell tools. Stop uses a private `.cache/controller-PORT.json`
+receipt and token-authenticated loopback request for this checkout only. It does
+not kill arbitrary port listeners. Set the same `PORT` when starting/stopping a
+nondefault instance. Keep the receipt private; it is ignored by Git and removed
+on graceful shutdown. For an older running release without a receipt, use its
+original terminal or service manager. Start/stop on native Windows still needs
+verification on a Windows machine.
 
 ## Recommended Operating Pattern
 

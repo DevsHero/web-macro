@@ -124,3 +124,71 @@ test('unsupported sites keep their animation and input APIs unchanged', async ()
     assert.equal(await page.locator('input').inputValue(), 'still works');
   } finally { await browser.close(); }
 });
+
+test('power saving follows a same-page canvas/context replacement and restores both contexts', async () => {
+  const browser = await chromium.launch({ headless: true, executablePath: discoverBrowsers()[0]?.executablePath });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<canvas id="first" width="200" height="200"></canvas>');
+    await page.evaluate(() => {
+      const gl = document.querySelector('canvas').getContext('webgl');
+      window.renderer = { gl, _render() {}, renderCallbacks: [] };
+      window.graphics = { bloom: true };
+      window.oldGl = gl; window.oldClear = gl.clear;
+      window.requirejs = name => name === 'Renderer/Renderer' ? renderer : graphics;
+      requirejs.defined = () => true;
+    });
+    await page.evaluate(installPowerSaving, powerPolicy(true, 2, 20));
+    await page.evaluate(() => {
+      const replacement = document.createElement('canvas');
+      replacement.width = replacement.height = 200;
+      renderer.gl = replacement.getContext('webgl');
+      window.newClear = renderer.gl.clear;
+      document.querySelector('canvas').replaceWith(replacement);
+    });
+    await page.waitForFunction(() => renderer.gl.clear !== newClear, null, { timeout: 2000 });
+    assert.equal(await page.evaluate(() => oldGl.clear === oldClear), true);
+    await page.evaluate(() => new Promise((resolve, reject) => {
+      const canvas = renderer.gl.canvas;
+      const extension = renderer.gl.getExtension('WEBGL_lose_context');
+      if (!extension) return reject(new Error('Context-loss extension required for this check'));
+      canvas.addEventListener('webglcontextlost', event => { event.preventDefault(); setTimeout(() => extension.restoreContext(), 100); }, { once: true });
+      canvas.addEventListener('webglcontextrestored', resolve, { once: true });
+      extension.loseContext();
+    }));
+    await page.waitForFunction(() => renderer.gl.clear !== newClear, null, { timeout: 2000 });
+    await page.evaluate(installPowerSaving, { enabled: false });
+    assert.equal(await page.evaluate(() => renderer.gl.clear === newClear && graphics.bloom), true);
+  } finally { await browser.close(); }
+});
+
+test('graphics installation rolls back unsupported hooks and serializes rapid toggles', async () => {
+  const browser = await chromium.launch({ headless: true, executablePath: discoverBrowsers()[0]?.executablePath });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<canvas width="100" height="100"></canvas>');
+    await page.evaluate(() => {
+      const gl = document.querySelector('canvas').getContext('webgl');
+      window.graphics = { bloom: true };
+      window.renderer = { gl, renderCallbacks: [], _render() {} };
+      renderer._renderBound = renderer._render.bind(renderer);
+      window.originals = { clear: gl.clear, bind: gl.bindFramebuffer, draw: gl.drawElements, bound: renderer._renderBound };
+      window.requirejs = name => name === 'Renderer/Renderer' ? renderer : graphics;
+      requirejs.defined = () => true;
+      Object.defineProperty(gl, 'clear', { value: gl.clear, configurable: true, writable: false });
+    });
+    const fallback = await page.evaluate(installPowerSaving, { enabled: true });
+    assert.equal(fallback.adapter, 'controller-only');
+    assert.ok(fallback.reason);
+    assert.equal(await page.evaluate(() => graphics.bloom && renderer.gl.bindFramebuffer === originals.bind && renderer.gl.drawElements === originals.draw), true, 'partial installation must be undone');
+    await page.evaluate(() => Object.defineProperty(renderer.gl, 'clear', { writable: true }));
+    await page.evaluate(() => Promise.all([
+      __webMacroPowerSaving.update({ enabled: true }),
+      __webMacroPowerSaving.update({ enabled: false }),
+      __webMacroPowerSaving.update({ enabled: true }),
+    ]));
+    assert.deepEqual(await page.evaluate(() => [__webMacroPowerSaving.status().enabled, __webMacroPowerSaving.status().adapter, graphics.bloom]), [true, 'robrowser-screen', false]);
+    await page.evaluate(installPowerSaving, { enabled: false });
+    assert.equal(await page.evaluate(() => renderer._renderBound === originals.bound && renderer.gl.clear === originals.clear && graphics.bloom), true);
+  } finally { await browser.close(); }
+});
