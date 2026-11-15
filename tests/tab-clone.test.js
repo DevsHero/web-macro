@@ -14,7 +14,7 @@ test('Duplicate Tab prompts for URL and copies independent workflows through the
   runtime.filename = filename;
   runtime.paths = Module._nodeModulePaths(path.dirname(filename));
   runtime._compile(source.slice(0, source.indexOf("process.on('SIGINT'")) + `
-    module.exports = { server, bindSocketHandlers, createGameTab, tabs,
+    module.exports = { server, bindSocketHandlers, createGameTab, tabs, logs, serializeTabForConfig,
       setContext(context) { browserContext = context; isBrowserContextClosed = false; browserConfigState.headless = true; }
     };`, filename);
   const api = runtime.exports;
@@ -99,6 +99,34 @@ test('Duplicate Tab prompts for URL and copies independent workflows through the
     assert.equal(await dashboard.locator('#addTabUrlInput').inputValue(), '');
     assert.equal(await dashboard.locator('#confirmAddTabButton').textContent(), 'Create Tab');
     await dashboard.locator('#cancelAddTabButton').click();
+    await card.getByRole('button', { name: 'Pause All', exact: true }).click();
+    await card.getByRole('button', { name: 'Resume All', exact: true }).waitFor();
+    const sequenced = await api.createGameTab({ url: 'about:blank', resumeWorkflows: true, workflows: [
+      { name: 'Bottom', sortOrder: 2, enabled: true, intervalSeconds: 1, steps: [{ command: 'wait', durationMs: 80 }] },
+      { name: 'Top', sortOrder: 1, enabled: true, intervalSeconds: 2, steps: [{ command: 'wait', durationMs: 80 }] },
+      { name: 'Skipped', sortOrder: 3, enabled: false, intervalSeconds: 1, steps: [{ command: 'wait', durationMs: 80 }] },
+    ] });
+    const seqCard = dashboard.locator(`[data-tab-card][data-tab-id="${sequenced.id}"]`);
+    await seqCard.getByRole('button', { name: 'Mode: Interval', exact: true }).click();
+    await seqCard.getByRole('button', { name: 'Mode: Sequence', exact: true }).waitFor();
+    const sequenceTab = api.tabs.get(sequenced.id);
+    assert.equal(api.serializeTabForConfig(sequenceTab).executionMode, 'sequence');
+    const deadline = Date.now() + 10000;
+    const starts = () => api.logs.filter(log => log.tabId === sequenced.id && log.action === 'workflow.start');
+    while (starts().length < 4 && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
+    assert.deepEqual(starts().slice(0, 4).map(log => log.workflowName), ['Top', 'Bottom', 'Top', 'Bottom']);
+    const events = api.logs.filter(log => log.tabId === sequenced.id && ['workflow.start', 'workflow.complete'].includes(log.action));
+    for (let index = 1; index < events.length; index++) assert.notEqual(events[index].action, events[index - 1].action);
+    assert.ok([...sequenceTab.workflows.values()].every(w => w.timer === null && w.resumeTimer === null));
+    await seqCard.getByRole('button', { name: 'Pause All', exact: true }).click();
+    await seqCard.getByRole('button', { name: 'Resume All', exact: true }).waitFor();
+    const count = starts().length;
+    await new Promise(resolve => setTimeout(resolve, 400));
+    assert.equal(starts().length, count);
+    await seqCard.getByRole('button', { name: 'Mode: Sequence', exact: true }).click();
+    await seqCard.getByRole('button', { name: 'Mode: Interval', exact: true }).waitFor();
+    assert.equal(sequenceTab.sequenceTimer, null);
+
   } finally {
     await browser.close();
     await new Promise(resolve => api.server.close(resolve));

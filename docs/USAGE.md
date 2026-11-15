@@ -32,6 +32,21 @@ target position are copied with fresh IDs and reset execution counters. The new
 tab starts paused; log in or prepare the page, then choose **Resume All**.
 The original tab and saved snapshots are unchanged.
 
+## Execution Modes
+
+Use the **Mode: Interval / Mode: Sequence** button on each tab to switch modes.
+Interval keeps independent countdowns for workflows and serializes due runs.
+Sequence counts down one enabled workflow at a time in the displayed top-to-bottom
+order, executes all its steps, then starts the next workflow's countdown. It loops
+back to the top after the last workflow and skips paused workflows. The workflow's
+start delay applies to its first turn; subsequent turns use its interval.
+
+Switching modes clears pending runs and waits for any current execution to finish.
+Pause/Resume and individual controls work in both modes. Reset All Countdowns
+starts a sequence from the top with full intervals. Run Once remains a manual
+execution. The selected mode is preserved in snapshots and duplicated tabs; older
+snapshots default to Interval.
+
 ## Pause, Resume, and Reset Countdowns
 
 Pause All pauses every workflow in that tab. Resume All resumes every workflow,

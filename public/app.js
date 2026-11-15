@@ -604,6 +604,7 @@
       label: tab.label,
       url: tab.url,
       navigation: tab.navigation,
+      executionMode: tab.executionMode,
       pausedAll: Boolean(tab.pausedAll),
       browserInfo: {
         summary: tab.browserInfo && tab.browserInfo.summary,
@@ -703,10 +704,11 @@
                 <span class="rounded-full border px-3 py-1 text-xs uppercase tracking-[0.2em] ${tabBadgeClasses}">${tab.pausedAll ? 'Tab Paused' : 'Tab Active'}</span>
               </div>
               <p class="break-all text-xs leading-6 text-slate-500">${escapeHtml(tab.url)}</p>
-              <p class="text-[11px] uppercase tracking-[0.22em] text-slate-500">Serial queue lane: workflows on this tab execute one at a time</p>
+              <p class="text-[11px] uppercase tracking-[0.22em] text-slate-500">${tab.executionMode === 'sequence' ? 'Sequence: top to bottom, one countdown at a time' : 'Interval: independent countdowns, serial execution'}</p>
             </div>
             <div class="flex flex-wrap gap-2 lg:justify-end">
               <button type="button" data-action="add-workflow" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-2 text-sm font-semibold text-teal-100 transition hover:bg-teal-300/20">Add Workflow</button>
+              <button type="button" data-action="toggle-mode" data-tab-id="${escapeHtml(tab.id)}" title="Switch between independent intervals and top-to-bottom sequence" class="rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-2 text-sm font-semibold text-teal-100">Mode: ${tab.executionMode === 'sequence' ? 'Sequence' : 'Interval'}</button>
               <button type="button" data-action="toggle-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border px-4 py-2 text-sm font-semibold transition ${tab.pausedAll ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20' : 'border-amber-300/20 bg-amber-300/10 text-amber-100 hover:bg-amber-300/20'}">${tab.pausedAll ? 'Resume All' : 'Pause All'}</button>
               <button type="button" data-action="reset-countdowns" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10">Reset All Countdowns</button>
               <button type="button" data-action="clone-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10">Duplicate Tab</button>
@@ -1683,6 +1685,13 @@
 
     if (action === 'edit-workflow') {
       openWorkflowModal(tabId, workflowId);
+      return;
+    }
+
+    if (action === 'toggle-mode') {
+      const tab = getTab(tabId);
+      const response = await emitWithAck('tab:execution-mode', { tabId: Number(tabId), mode: tab.executionMode === 'sequence' ? 'interval' : 'sequence' });
+      if (!response.ok) flash(response.error);
       return;
     }
 

@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { startSequence } = require('./lib/sequence');
 const { buildCloneOptions } = require('./lib/tab-clone');
 const http = require('http');
 const path = require('path');
@@ -960,6 +961,7 @@ function serializeTab(tab) {
     pausedAll: allWorkflowsPaused(tab),
     url: safePageUrl(tab.page),
     navigation: tab.navigation || { state: 'ready', error: null },
+    executionMode: tab.executionMode,
     defaultPosition: cloneValue(tab.defaultPosition),
     browserInfo: buildBrowserSummary(),
     workflows,
@@ -1249,6 +1251,7 @@ function attachTabLifecycle(tab) {
 }
 
 function clearTabWorkflows(tab) {
+  clearInterval(tab.sequenceTimer);
   for (const workflow of tab.workflows.values()) {
     clearWorkflowTimers(workflow);
     workflow.queuedRuns = 0;
@@ -1265,6 +1268,10 @@ function createTabRecord(page, options = {}) {
     createdAt: nowIso(),
     pausedAll: coerceBoolean(options.pausedAll, false),
     page,
+    executionMode: options.executionMode === 'sequence' ? 'sequence' : 'interval',
+    sequenceTimer: null,
+    sequenceCurrentId: null,
+    sequenceCursorId: null,
     workflows: new Map(),
     workflowQueue: [],
     activeWorkflowId: null,
@@ -1274,6 +1281,7 @@ function createTabRecord(page, options = {}) {
 
   tabs.set(tab.id, tab);
   attachTabLifecycle(tab);
+  if (tab.executionMode === 'sequence') enableSequence(tab);
   return tab;
 }
 
@@ -1402,6 +1410,11 @@ function startWorkflow(tab, workflow, delayMs = workflow.intervalMs) {
   workflow.pauseReason = null;
   workflow.remainingMs = initialDelay;
   workflow.nextRunAt = Date.now() + initialDelay;
+  if (tab.executionMode === 'sequence') {
+    workflow.nextRunAt = null;
+    if (tab.sequenceCurrentId === workflow.id) tab.sequenceCurrentId = null;
+    return;
+  }
 
   if (initialDelay === workflow.intervalMs) {
     startRecurringWorkflowTimer(tab, workflow);
@@ -1562,6 +1575,8 @@ async function runWorkflow(tab, workflow, options = {}) {
     return;
   }
 
+  if (options.trigger === 'scheduled' && tab.executionMode === 'sequence') return;
+
   if (workflow.pauseReason !== null && !options.ignorePause) {
     return;
   }
@@ -1662,7 +1677,7 @@ async function runWorkflow(tab, workflow, options = {}) {
 
     if (workflow.pauseReason === null && workflow.enabled) {
       workflow.remainingMs = workflow.intervalMs;
-      workflow.nextRunAt = Date.now() + workflow.intervalMs;
+      workflow.nextRunAt = tab.executionMode === 'sequence' ? null : Date.now() + workflow.intervalMs;
     }
 
     emitState();
@@ -1767,6 +1782,7 @@ function serializeTabForConfig(tab) {
     name: tab.label,
     url: safePageUrl(tab.page),
     pausedAll: tab.pausedAll,
+    executionMode: tab.executionMode,
     defaultPosition: cloneValue(tab.defaultPosition),
     workflows: Array.from(tab.workflows.values())
       .sort(compareWorkflowDisplayOrder)
@@ -1890,8 +1906,43 @@ function toggleTabPause(tabId) {
   return serializeTab(tab);
 }
 
+function enableSequence(tab) {
+  startSequence(tab, { runWorkflow, compareWorkflows: compareWorkflowDisplayOrder,
+    onError: error => addLog({ level: 'error', tabId: tab.id, action: 'sequence.error', message: error.message }) });
+}
+
+function setTabExecutionMode(tabId, mode) {
+  if (!['interval', 'sequence'].includes(mode)) throw createHttpError('Invalid execution mode.', 400);
+  const tab = getTabOrThrow(tabId);
+  if (tab.executionMode === mode) return serializeTab(tab);
+  clearInterval(tab.sequenceTimer);
+  tab.sequenceTimer = null;
+  tab.sequenceCurrentId = null;
+  tab.sequenceCursorId = null;
+  for (const workflow of tab.workflows.values()) {
+    workflow.remainingMs = getWorkflowRemainingMs(workflow);
+    clearWorkflowTimers(workflow);
+    workflow.nextRunAt = null;
+    workflow.queuedRuns = 0;
+  }
+  tab.workflowQueue = [];
+  tab.executionMode = mode;
+  if (mode === 'sequence') enableSequence(tab);
+  else for (const workflow of tab.workflows.values()) {
+    if (workflow.enabled && workflow.pauseReason === null) startWorkflow(tab, workflow, workflow.remainingMs);
+  }
+  emitState();
+  return serializeTab(tab);
+}
+
 function resetTabCountdowns(tabId) {
   const tab = getTabOrThrow(tabId);
+  tab.sequenceCurrentId = null;
+  tab.sequenceCursorId = null;
+  if (tab.executionMode === 'sequence') {
+    clearInterval(tab.sequenceTimer);
+    enableSequence(tab);
+  }
   for (const workflow of tab.workflows.values()) {
     clearWorkflowTimers(workflow);
     removeQueuedRunsForWorkflow(tab, workflow.id);
@@ -2101,6 +2152,7 @@ async function replaceRuntimeFromDefinitions(definition, options = {}) {
       label: tabDefinition.name || tabDefinition.label,
       url: normalizeTabUrl(tabDefinition.url),
       pausedAll: coerceBoolean(tabDefinition.pausedAll, false),
+      executionMode: tabDefinition.executionMode,
       defaultPosition: tabDefinition.defaultPosition || DEFAULT_TAB_POSITION,
       workflows: Array.isArray(tabDefinition.workflows) ? tabDefinition.workflows : [],
       resumeWorkflows: coerceBoolean(options.resumeWorkflows, false),
@@ -2143,6 +2195,7 @@ async function createGameTab(options = {}) {
   const page = await browserContext.newPage();
   const tab = createTabRecord(page, {
     label: options.label,
+    executionMode: options.executionMode,
     pausedAll: options.pausedAll,
     defaultPosition: options.defaultPosition || DEFAULT_TAB_POSITION,
   });
@@ -2428,6 +2481,15 @@ function bindSocketHandlers() {
         if (typeof callback === 'function') {
           callback({ ok: false, error: message });
         }
+      }
+    });
+
+    socket.on('tab:execution-mode', (payload, callback) => {
+      try {
+        const result = setTabExecutionMode(payload.tabId, payload.mode);
+        if (typeof callback === 'function') callback({ ok: true, result });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
       }
     });
 
