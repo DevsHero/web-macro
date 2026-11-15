@@ -553,7 +553,26 @@
     state.selectedConfigId = current ? current.id : configs[0] ? configs[0].id : '';
   }
 
+  let allTabsControlBusy = false;
+  let powerSavingBusy = false;
+
+  function renderPowerSaving() {
+    const enabled = Boolean(currentBrowserConfig().powerSaving);
+    const button = document.getElementById('powerSavingButton');
+    button.disabled = powerSavingBusy || !state.connected;
+    button.setAttribute('aria-pressed', String(enabled));
+    setTextIfChanged(button, `Power Saving: ${enabled ? 'On' : 'Off'}`);
+    const policy = state.snapshot.resourcePolicy;
+    if (policy) setTextIfChanged(document.getElementById('hostResourceSummary'), `Auto CPU scheduling · ${policy.availableCpus} available CPU threads${enabled ? ' · logs off · roBrowser graphics where supported' : ''}`);
+    if (enabled) state.logsVisible = false;
+    elements.toggleLogsButton.disabled = enabled;
+  }
+
   function renderConnectionState() {
+    renderPowerSaving();
+    document.querySelectorAll('[data-all-tabs-action]').forEach(button => {
+      button.disabled = allTabsControlBusy || !state.connected || !state.snapshot.tabs.length;
+    });
     elements.connectionText.textContent = state.connected ? 'Socket Connected' : 'Reconnecting';
     elements.connectionPill.className = state.connected
       ? 'inline-flex items-center justify-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-200'
@@ -582,6 +601,9 @@
     updateSelectedConfigId();
 
     const configs = state.snapshot.savedConfigs || [];
+    const signature = JSON.stringify([configs, state.selectedConfigId]);
+    if (state.renderCache.configSignature === signature) return;
+    state.renderCache.configSignature = signature;
 
     elements.savedConfigSelect.innerHTML = configs.length
       ? configs
@@ -748,21 +770,36 @@
     `;
   }
 
+  const tabCardSignatures = new Map();
   function renderTabs() {
     const tabs = state.snapshot.tabs || [];
-    const nextSignature = tabsRenderSignature(tabs);
+    const entries = tabs.map(tab => ({ tab, signature: tabsRenderSignature([tab]) }));
+    const nextSignature = entries.map(entry => entry.signature).join('|');
     elements.emptyState.classList.toggle('hidden', tabs.length > 0);
-
-    if (state.renderCache.tabsSignature === nextSignature) {
-      return false;
-    }
-
+    if (state.renderCache.tabsSignature === nextSignature) return false;
     const scrollPositions = captureTabScrollPositions();
     state.renderCache.tabsSignature = nextSignature;
-    elements.tabsGrid.innerHTML = tabs.map((tab) => renderTabCard(tab)).join('');
+    const cards = new Map([...elements.tabsGrid.children].map(card => [card.dataset.tabId, card]));
+    const present = new Set(tabs.map(tab => String(tab.id)));
+    for (const [id, card] of cards) if (!present.has(id)) { card.remove(); tabCardSignatures.delete(id); }
+    entries.forEach(({ tab, signature }, index) => {
+      const id = String(tab.id);
+      let card = cards.get(id);
+      if (!card || tabCardSignatures.get(id) !== signature) {
+        const template = document.createElement('template');
+        template.innerHTML = renderTabCard(tab);
+        const replacement = template.content.firstElementChild;
+        if (card) card.replaceWith(replacement);
+        card = replacement;
+        tabCardSignatures.set(id, signature);
+      }
+      if (elements.tabsGrid.children[index] !== card) elements.tabsGrid.insertBefore(card, elements.tabsGrid.children[index] || null);
+    });
     restoreTabScrollPositions(scrollPositions);
     return true;
   }
+
+  function setTextIfChanged(node, value) { if (node.textContent !== value) node.textContent = value; }
 
   function syncTabRuntimeMetrics() {
     (state.snapshot.tabs || []).forEach((tab) => {
@@ -778,16 +815,16 @@
         const errorsNode = row.querySelector('[data-runtime-role="errors"]');
 
         if (nextNode) {
-          nextNode.textContent = `Next ${formatCountdown(workflow.remainingSeconds)}`;
+          setTextIfChanged(nextNode, `Next ${formatCountdown(workflow.remainingSeconds)}`);
         }
         if (lastNode) {
-          lastNode.textContent = `Last ${formatClock(workflow.lastRunAt)}`;
+          setTextIfChanged(lastNode, `Last ${formatClock(workflow.lastRunAt)}`);
         }
         if (runsNode) {
-          runsNode.textContent = `Runs ${workflow.runCount}`;
+          setTextIfChanged(runsNode, `Runs ${workflow.runCount}`);
         }
         if (errorsNode) {
-          errorsNode.textContent = `Errors ${workflow.errorCount}`;
+          setTextIfChanged(errorsNode, `Errors ${workflow.errorCount}`);
         }
       });
     });
@@ -839,13 +876,15 @@
   }
 
   function renderLogs() {
-    renderLogFilterOptions();
+    if (state.logsVisible && !document.hidden) renderLogFilterOptions();
 
     const visibleLogs = filteredLogs();
     elements.logCount.textContent = `${visibleLogs.length} visible / ${state.logs.length} total`;
-    elements.toggleLogsButton.textContent = state.logsVisible ? 'Hide Logs' : 'Show Logs';
+    const powerSaving = Boolean(currentBrowserConfig().powerSaving);
+    elements.toggleLogsButton.textContent = powerSaving ? 'Logs Off (Power Saving)' : state.logsVisible ? 'Hide Logs' : 'Show Logs';
     elements.logsBodyWrapper.classList.toggle('hidden', !state.logsVisible);
     elements.dashboardMain.style.paddingBottom = '6rem';
+    if (powerSaving || !state.logsVisible || document.hidden) return;
 
     if (!visibleLogs.length) {
       elements.logConsole.innerHTML = '<p class="text-slate-500">No logs match the current filter.</p>';
@@ -1206,9 +1245,16 @@
     renderLogs();
   }
 
-  function appendLog(entry) {
-    state.logs = [...state.logs, entry].slice(-500);
-    renderLogs();
+  let logRenderTimer = null;
+  function scheduleLogRender() {
+    if (document.hidden || logRenderTimer) return;
+    logRenderTimer = setTimeout(() => { logRenderTimer = null; renderLogs(); }, 100);
+  }
+
+  function appendLogs(entries) {
+    state.logs.push(...entries);
+    if (state.logs.length > 500) state.logs.splice(0, state.logs.length - 500);
+    scheduleLogRender();
   }
 
   function replaceLogs(entries) {
@@ -1427,6 +1473,39 @@
     elements.addTabModal.classList.remove('hidden');
     elements.addTabUrlInput.focus();
   }
+
+  document.querySelectorAll('[data-all-tabs-action]').forEach(button => {
+    button.addEventListener('click', async () => {
+      if (allTabsControlBusy || !state.connected) return;
+      allTabsControlBusy = true;
+      renderConnectionState();
+      try {
+        const action = button.dataset.allTabsAction;
+        const response = await emitWithAck('tabs:control', { action });
+        if (!response.ok) { flash(response.error || 'All-tabs control failed.'); return; }
+        const messages = { pause: 'Paused all workflows in all tabs.', resume: 'Resumed all workflows in all tabs.', reset: 'Reset countdowns in all tabs; paused workflows remain paused.' };
+        flash(messages[action], 'success');
+      } finally {
+        allTabsControlBusy = false;
+        renderConnectionState();
+      }
+    });
+  });
+
+  document.getElementById('powerSavingButton').addEventListener('click', async () => {
+    if (powerSavingBusy || !state.connected) return;
+    powerSavingBusy = true;
+    renderPowerSaving();
+    try {
+      const enabled = !currentBrowserConfig().powerSaving;
+      const response = await emitWithAck('runtime:power-saving', { enabled });
+      if (!response.ok) { flash(response.error || 'Power Saving failed.'); return; }
+      state.snapshot.browserConfig.powerSaving = response.result.enabled;
+      renderPowerSaving();
+      renderLogs();
+      flash(enabled ? 'Power Saving on. Logs cleared and disabled; macro timing stays unchanged.' : 'Power Saving off. Graphics and logs restored.', 'success');
+    } finally { powerSavingBusy = false; renderPowerSaving(); }
+  });
 
   elements.addTabButton.addEventListener('click', () => openAddTabModal());
 
@@ -2056,6 +2135,7 @@
       headless: elements.browserHeadlessInput.checked,
       activateTabOnInteraction: elements.browserActivateTabInput.checked,
       optimizeForHiddenExecution: elements.browserOptimizeForHiddenExecutionInput.checked,
+      powerSaving: Boolean(currentBrowserConfig().powerSaving),
     };
 
     state.applyingBrowser = true;
@@ -2078,6 +2158,7 @@
 
   socket.on('connect', () => {
     state.connected = true;
+    socket.emit('dashboard:visibility', { visible: !document.hidden });
     renderConnectionState();
   });
 
@@ -2086,25 +2167,32 @@
     renderConnectionState();
   });
 
-  socket.on('state:snapshot', (snapshot) => {
-    state.snapshot = snapshot;
+  function renderSnapshot() {
+    renderConnectionState();
     renderStats();
     renderSavedConfigControls();
     const tabsChanged = renderTabs();
-    if (!tabsChanged) {
-      syncTabRuntimeMetrics();
-    }
-    if (tabsChanged) {
-      renderLogs();
-    }
+    syncTabRuntimeMetrics();
+    if (tabsChanged) renderLogs();
+  }
+
+  socket.on('state:snapshot', (snapshot) => {
+    state.snapshot = snapshot;
+    if (!document.hidden) renderSnapshot();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (state.connected) socket.emit('dashboard:visibility', { visible: !document.hidden });
+    if (!document.hidden) { renderSnapshot(); renderLogs(); }
   });
 
   socket.on('logs:bootstrap', (entries) => {
     replaceLogs(entries);
   });
 
+  socket.on('logs:batch', entries => appendLogs(entries));
+
   socket.on('log:entry', (entry) => {
-    appendLog(entry);
+    appendLogs([entry]);
   });
 
   renderDashboard();

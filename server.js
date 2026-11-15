@@ -1,4 +1,8 @@
 const fs = require('fs');
+const { createRuntimePublisher } = require('./lib/runtime-publisher');
+const { createConfigCatalog } = require('./lib/config-catalog');
+const { hostScheduler } = require('./lib/host-scheduler');
+const { installPowerSaving, powerPolicy } = require('./lib/power-saving');
 const { startSequence } = require('./lib/sequence');
 const { buildCloneOptions } = require('./lib/tab-clone');
 const http = require('http');
@@ -62,6 +66,7 @@ const DEFAULT_BROWSER_CONFIG = {
   headless: process.env.BROWSER_HEADLESS === 'true',
   activateTabOnInteraction: false,
   optimizeForHiddenExecution: true,
+  powerSaving: false,
 };
 const DEFAULT_TAB_POSITION = {
   coordinateSystem: 'canvas',
@@ -270,33 +275,8 @@ function syncPrefixedCounter(id, prefix, currentValue) {
   return Math.max(currentValue, Number(match[1]) + 1);
 }
 
-function listSavedConfigs() {
-  ensureConfigDir();
-
-  return fs
-    .readdirSync(CONFIG_DIR, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
-    .map((entry) => {
-      const configId = entry.name.replace(/\.json$/i, '');
-      const filePath = configFilePath(configId);
-
-      try {
-        const document = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        return {
-          id: configId,
-          name: document.configName || configId,
-          savedAt: document.savedAt || null,
-        };
-      } catch (_error) {
-        return {
-          id: configId,
-          name: configId,
-          savedAt: null,
-        };
-      }
-    })
-    .sort((left, right) => String(left.name).localeCompare(String(right.name)));
-}
+const configCatalog = createConfigCatalog(CONFIG_DIR);
+function listSavedConfigs() { return configCatalog.list(); }
 
 function readSavedConfig(configId) {
   ensureConfigDir();
@@ -336,6 +316,7 @@ function importConfigDocument(document) {
 
   ensureConfigDir();
   fs.writeFileSync(configFilePath(configId), JSON.stringify(normalizedDocument, null, 2), 'utf8');
+  configCatalog.invalidate();
 
   addLog({
     action: 'config.import',
@@ -475,6 +456,7 @@ function normalizeBrowserConfig(rawConfig = {}) {
     headless: coerceBoolean(merged.headless, false),
     activateTabOnInteraction: coerceBoolean(merged.activateTabOnInteraction, false),
     optimizeForHiddenExecution: coerceBoolean(merged.optimizeForHiddenExecution, true),
+    powerSaving: coerceBoolean(merged.powerSaving, false),
   };
 }
 
@@ -574,6 +556,7 @@ function createHttpError(message, statusCode = 400) {
 }
 
 function addLog(messageOrPayload, level = 'info') {
+  if (browserConfigState.powerSaving) return null;
   const payload =
     typeof messageOrPayload === 'string'
       ? {
@@ -604,13 +587,13 @@ function addLog(messageOrPayload, level = 'info') {
     logs.shift();
   }
 
-  io.emit('log:entry', entry);
+  runtimePublisher.log();
   return entry;
 }
 
 function clearLogs() {
   logs.length = 0;
-  io.emit('logs:bootstrap', logs);
+  runtimePublisher.clear();
 }
 
 function safePageUrl(page) {
@@ -982,20 +965,48 @@ function buildState() {
     browserSummary: buildBrowserSummary(),
     savedConfigs: listSavedConfigs(),
     currentConfigName,
+    resourcePolicy: { ...hostScheduler.summary(), powerSaving: browserConfigState.powerSaving },
   };
 }
 
-function emitState(targetSocket) {
-  const payload = buildState();
-  if (targetSocket) {
-    targetSocket.emit('state:snapshot', payload);
-    return;
-  }
+const runtimePublisher = createRuntimePublisher({ io, buildState, getLogs: () => logs, delayMs: () => browserConfigState.powerSaving ? 1000 : 100 });
+function emitState(targetSocket) { runtimePublisher.state(targetSocket); }
 
-  io.emit('state:snapshot', payload);
+const powerPages = new WeakSet();
+let powerRefreshTimer = null;
+function currentPowerPolicy(tab) {
+  return powerPolicy(browserConfigState.powerSaving, hostScheduler.summary().availableCpus, tabs.size, tab.id);
+}
+async function applyPowerFrame(tab, frame) {
+  if (tab.isDisposing || tab.page.isClosed() || frame.isDetached()) return;
+  await frame.evaluate(installPowerSaving, currentPowerPolicy(tab)).catch(() => {});
+}
+async function configurePowerPage(tab) {
+  const page = tab.page;
+  if (!powerPages.has(page)) {
+    powerPages.add(page);
+    await page.addInitScript(installPowerSaving, { enabled: false });
+    page.on('framenavigated', frame => { void applyPowerFrame(tab, frame); });
+  }
+  await Promise.all(page.frames().map(frame => applyPowerFrame(tab, frame)));
+}
+function refreshPowerPolicies() {
+  if (powerRefreshTimer || !browserConfigState.powerSaving) return;
+  powerRefreshTimer = setTimeout(() => {
+    powerRefreshTimer = null;
+    for (const tab of tabs.values()) void configurePowerPage(tab).catch(() => {});
+  }, 100);
+  powerRefreshTimer.unref();
+}
+async function setPowerSaving(enabled) {
+  browserConfigState.powerSaving = Boolean(enabled);
+  if (browserConfigState.powerSaving) clearLogs();
+  await Promise.all([...tabs.values()].map(tab => configurePowerPage(tab)));
+  emitState();
+  return { enabled: browserConfigState.powerSaving, ...hostScheduler.summary() };
 }
 
-async function focusTarget(page, target, workflow = null) {
+async function focusTarget(page, target, workflow = null, resolvedCanvas = null) {
   if (target === 'page') {
     if (shouldActivateTabForWorkflow(workflow)) {
       await page.bringToFront();
@@ -1009,7 +1020,7 @@ async function focusTarget(page, target, workflow = null) {
     return;
   }
 
-  const canvasTarget = await locateGameCanvas(page);
+  const canvasTarget = resolvedCanvas || await locateGameCanvas(page);
   if (!canvasTarget || !canvasTarget.canvasHandle) {
     throw new Error('Canvas could not be found for focus.');
   }
@@ -1119,7 +1130,7 @@ async function performRobustClick(page, tab, step) {
       throw new Error('Canvas is not visible for click.');
     }
 
-    await focusTarget(page, 'canvas');
+    await focusTarget(page, 'canvas', null, canvasTarget);
 
     const ratios = effectivePosition.mode === 'custom' ? null : resolvePresetRatios(effectivePosition);
     const localPoint = effectivePosition.mode === 'custom'
@@ -1184,7 +1195,7 @@ async function performRobustMove(page, tab, step, workflow = null) {
       throw new Error('Canvas is not visible for move.');
     }
 
-    await focusTarget(page, 'canvas', workflow);
+    await focusTarget(page, 'canvas', workflow, canvasTarget);
 
     const ratios = effectivePosition.mode === 'custom' ? null : resolvePresetRatios(effectivePosition);
     const localPoint = effectivePosition.mode === 'custom'
@@ -1204,7 +1215,7 @@ async function performRobustMove(page, tab, step, workflow = null) {
 
   const canvasTarget = await locateGameCanvas(page);
   if (canvasTarget && canvasTarget.canvasHandle) {
-    await focusTarget(page, 'canvas', workflow);
+    await focusTarget(page, 'canvas', workflow, canvasTarget);
   }
 
   const point = await calculatePosition(page, tab, effectivePosition);
@@ -1213,6 +1224,7 @@ async function performRobustMove(page, tab, step, workflow = null) {
 }
 
 function clearWorkflowTimers(workflow) {
+  workflow.scheduleGeneration = (workflow.scheduleGeneration || 0) + 1;
   if (workflow.timer) {
     clearInterval(workflow.timer);
     workflow.timer = null;
@@ -1251,7 +1263,7 @@ function attachTabLifecycle(tab) {
 }
 
 function clearTabWorkflows(tab) {
-  clearInterval(tab.sequenceTimer);
+  tab.sequenceTimer?.stop();
   for (const workflow of tab.workflows.values()) {
     clearWorkflowTimers(workflow);
     workflow.queuedRuns = 0;
@@ -1301,6 +1313,8 @@ function registerExistingPage(page) {
   }
 
   const tab = createTabRecord(page, {});
+  void configurePowerPage(tab).catch(() => {});
+  refreshPowerPolicies();
   void waitForPageReady(tab.page);
   addLog({
     tabId: tab.id,
@@ -1348,6 +1362,12 @@ function removeQueuedRunsForWorkflow(tab, workflowId) {
 }
 
 function enqueueWorkflowRun(tab, workflow, options, message) {
+  // One pending scheduled rerun per workflow; missed intervals must not build
+  // an ever-growing backlog. Explicit Run Once requests remain distinct.
+  if (!options.ignorePause && tab.workflowQueue.some(entry => entry.workflowId === workflow.id && !entry.ignorePause)) return;
+  if (options.ignorePause && tab.workflowQueue.filter(entry => entry.ignorePause).length >= 32) {
+    throw createHttpError('Manual run queue is full. Wait for pending runs to finish.', 429);
+  }
   tab.workflowQueue.push({
     workflowId: workflow.id,
     trigger: options.trigger || 'queued',
@@ -1413,6 +1433,7 @@ function startWorkflow(tab, workflow, delayMs = workflow.intervalMs) {
   if (tab.executionMode === 'sequence') {
     workflow.nextRunAt = null;
     if (tab.sequenceCurrentId === workflow.id) tab.sequenceCurrentId = null;
+    tab.sequenceTimer?.wake();
     return;
   }
 
@@ -1421,11 +1442,12 @@ function startWorkflow(tab, workflow, delayMs = workflow.intervalMs) {
     return;
   }
 
+  const generation = workflow.scheduleGeneration;
   workflow.resumeTimer = setTimeout(async () => {
     workflow.resumeTimer = null;
     await runWorkflow(tab, workflow, { trigger: 'scheduled' });
 
-    if (workflow.pauseReason !== null || !workflow.enabled) {
+    if (workflow.scheduleGeneration !== generation || workflow.pauseReason !== null || !workflow.enabled) {
       return;
     }
 
@@ -1445,6 +1467,7 @@ function pauseWorkflow(tab, workflow, reason, options = {}) {
     workflow.enabled = false;
   }
   clearWorkflowTimers(workflow);
+  tab.sequenceTimer?.wake();
   const removedQueuedRuns = removeQueuedRunsForWorkflow(tab, workflow.id);
   if (removedQueuedRuns > 0) {
     workflow.queuedRuns = Math.max(0, workflow.queuedRuns - removedQueuedRuns);
@@ -1682,6 +1705,7 @@ async function runWorkflow(tab, workflow, options = {}) {
 
     emitState();
     drainTabWorkflowQueue(tab);
+    tab.sequenceTimer?.wake();
   }
 }
 
@@ -1713,6 +1737,7 @@ function removeWorkflowFromTab(tabId, workflowId) {
     tab.activeWorkflowId = null;
   }
   tab.workflows.delete(workflow.id);
+  tab.sequenceTimer?.wake();
   addLog({
     tabId: tab.id,
     tabLabel: tab.label,
@@ -1812,6 +1837,7 @@ function upsertWorkflowOnTab(tabId, rawWorkflow, options = {}) {
   }
 
   tab.workflows.set(workflow.id, workflow);
+  tab.sequenceTimer?.wake();
 
   if (!options.skipScheduling) {
     if (tab.pausedAll && workflow.enabled) {
@@ -1886,9 +1912,9 @@ function removeRuleFromTab(tabId, workflowId) {
   return removeWorkflowFromTab(tabId, workflowId);
 }
 
-function toggleTabPause(tabId) {
+function toggleTabPause(tabId, desiredResume = null) {
   const tab = getTabOrThrow(tabId);
-  const resume = allWorkflowsPaused(tab);
+  const resume = desiredResume ?? allWorkflowsPaused(tab);
   tab.pausedAll = false;
   for (const workflow of tab.workflows.values()) {
     if (resume) {
@@ -1915,7 +1941,7 @@ function setTabExecutionMode(tabId, mode) {
   if (!['interval', 'sequence'].includes(mode)) throw createHttpError('Invalid execution mode.', 400);
   const tab = getTabOrThrow(tabId);
   if (tab.executionMode === mode) return serializeTab(tab);
-  clearInterval(tab.sequenceTimer);
+  tab.sequenceTimer?.stop();
   tab.sequenceTimer = null;
   tab.sequenceCurrentId = null;
   tab.sequenceCursorId = null;
@@ -1940,7 +1966,7 @@ function resetTabCountdowns(tabId) {
   tab.sequenceCurrentId = null;
   tab.sequenceCursorId = null;
   if (tab.executionMode === 'sequence') {
-    clearInterval(tab.sequenceTimer);
+    tab.sequenceTimer?.stop();
     enableSequence(tab);
   }
   for (const workflow of tab.workflows.values()) {
@@ -1971,6 +1997,7 @@ function removeTab(tabId, reason = 'tab removed') {
 
   disposeTabRuntime(tab);
   tabs.delete(tab.id);
+  refreshPowerPolicies();
 
   if (!isShuttingDown && !isResettingController) {
     addLog({
@@ -2200,6 +2227,9 @@ async function createGameTab(options = {}) {
     defaultPosition: options.defaultPosition || DEFAULT_TAB_POSITION,
   });
 
+  await configurePowerPage(tab);
+  refreshPowerPolicies();
+
   emitState();
 
   tab.navigation = { state: resolvedUrl === 'about:blank' ? 'ready' : 'loading', requestedUrl: resolvedUrl, error: null };
@@ -2277,6 +2307,7 @@ function saveCurrentConfig(rawName) {
 
   ensureConfigDir();
   fs.writeFileSync(configFilePath(configId), JSON.stringify(document, null, 2), 'utf8');
+  configCatalog.invalidate();
   currentConfigName = configName;
 
   addLog({
@@ -2318,6 +2349,7 @@ function deleteSavedConfig(configId) {
   }
 
   fs.rmSync(filePath, { force: true });
+  configCatalog.invalidate();
   if (currentConfigName && sanitizeConfigId(currentConfigName) === configId) {
     currentConfigName = null;
   }
@@ -2484,6 +2516,38 @@ function bindSocketHandlers() {
       }
     });
 
+    socket.on('dashboard:visibility', (payload) => {
+      socket.data.dashboardVisible = payload?.visible !== false;
+      if (socket.data.dashboardVisible) {
+        emitState(socket);
+        socket.emit('logs:bootstrap', logs);
+      }
+    });
+
+    socket.on('runtime:power-saving', async (payload, callback) => {
+      try {
+        if (typeof payload?.enabled !== 'boolean') throw createHttpError('Power Saving requires an explicit enabled value.', 400);
+        const result = await setPowerSaving(payload.enabled);
+        if (typeof callback === 'function') callback({ ok: true, result });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on('tabs:control', (payload, callback) => {
+      try {
+        const action = payload && payload.action;
+        if (!['pause', 'resume', 'reset'].includes(action)) throw createHttpError('Invalid all-tabs action.', 400);
+        for (const tab of tabs.values()) {
+          if (action === 'reset') resetTabCountdowns(tab.id);
+          else toggleTabPause(tab.id, action === 'resume');
+        }
+        if (typeof callback === 'function') callback({ ok: true, result: { tabCount: tabs.size } });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
+      }
+    });
+
     socket.on('tab:execution-mode', (payload, callback) => {
       try {
         const result = setTabExecutionMode(payload.tabId, payload.mode);
@@ -2640,6 +2704,8 @@ async function shutdown(signal) {
 
   isShuttingDown = true;
   console.log(`Shutting down controller (${signal})...`);
+  runtimePublisher.close();
+  clearTimeout(powerRefreshTimer);
 
   if (stateBroadcastTimer) {
     clearInterval(stateBroadcastTimer);
@@ -2665,7 +2731,8 @@ async function start() {
   await initializeBrowserController();
 
   stateBroadcastTimer = setInterval(() => {
-    emitState();
+    // Event updates cover paused/idle tabs; only running countdowns need ticks.
+    if (Array.from(tabs.values()).some(tab => Array.from(tab.workflows.values()).some(workflow => workflow.pauseReason === null && workflow.nextRunAt !== null))) emitState();
   }, STATE_BROADCAST_MS);
 
   server.on('error', (err) => {

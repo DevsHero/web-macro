@@ -47,6 +47,34 @@ starts a sequence from the top with full intervals. Run Once remains a manual
 execution. The selected mode is preserved in snapshots and duplicated tabs; older
 snapshots default to Interval.
 
+## Control All Tabs
+
+**Power Saving: On/Off** in the top menu applies immediately without closing tabs
+or logging out. It clears and disables controller logs and reduces dashboard
+updates to once per second while visible. Save a snapshot to retain this choice.
+
+For compatible roBrowser clients (RequireJS or ESM/import maps), it disables
+optional post-processing and reduces screen-only WebGL redraws to an automatic
+2–12 FPS budget based on available host CPUs and tab count. Game tick/events,
+offscreen texture generation, picking, network traffic and macro delays remain
+active. Input briefly restores full drawing. Turning the mode off restores the
+previous graphics settings. Generic or bundled clients without accessible modules
+receive controller savings only; their game APIs and frame loop stay unchanged.
+
+CPU scheduling is automatic. Short canvas/focus preparations share a fair queue
+with one slot per available CPU thread (including supported host/container quotas).
+Tabs take turns; delays and held keys never occupy these slots. Chromium renderer
+processes perform game work across CPU cores under the OS scheduler. This does
+not pin a tab to a core or guarantee zero delay if 20 games exceed a small host's
+capacity. There are no per-user thread settings.
+
+The top menu has **Pause All Tabs**, **Resume All Tabs**, and **Reset All Countdowns**.
+These actions apply to every workflow in every managed tab, in both execution modes.
+Pause and Resume are explicit actions: clicking Pause twice keeps everything paused.
+Resume includes individually paused workflows. Reset restores full intervals while
+preserving pause states and restarts Sequence tabs from the top. Current executions
+finish normally. Per-tab and individual controls remain available.
+
 ## Pause, Resume, and Reset Countdowns
 
 Pause All pauses every workflow in that tab. Resume All resumes every workflow,

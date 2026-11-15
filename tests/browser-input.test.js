@@ -178,3 +178,26 @@ test('chat keyboard steps submit without requesting tab activation', async () =>
     assert.equal(foreground.isClosed(), false);
   } finally { await context.close(); }
 });
+
+test('canvas handles are reused and released; larger/replaced canvases win immediately', async () => {
+  const { locateGameCanvas } = require('../lib/browser-input');
+  const page = await browser.newPage();
+  try {
+    await page.setContent('<canvas id="small" width="10" height="10"></canvas><canvas id="large" width="600" height="400"></canvas>');
+    const first = await locateGameCanvas(page);
+    let disposed = 0;
+    const dispose = first.canvasHandle.dispose.bind(first.canvasHandle);
+    first.canvasHandle.dispose = async () => { disposed++; await dispose(); };
+    assert.equal(await first.canvasHandle.evaluate(node => node.id), 'large');
+    for (let i = 0; i < 10; i++) assert.equal((await locateGameCanvas(page)).canvasHandle, first.canvasHandle);
+    await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<canvas id="new-largest" width="700" height="500"></canvas>'));
+    const next = await locateGameCanvas(page);
+    assert.equal(await next.canvasHandle.evaluate(node => node.id), 'new-largest');
+    assert.equal(disposed, 1, 'previous winner is released');
+    await page.evaluate(() => document.getElementById('new-largest').outerHTML = '<canvas id="replacement" width="800" height="600"></canvas>');
+    assert.equal(await (await locateGameCanvas(page)).canvasHandle.evaluate(node => node.id), 'replacement');
+    await page.goto('about:blank');
+    await page.setContent('<canvas id="after-navigation" width="500" height="500"></canvas>');
+    assert.equal(await (await locateGameCanvas(page)).canvasHandle.evaluate(node => node.id), 'after-navigation');
+  } finally { await page.close(); }
+});
