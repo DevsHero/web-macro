@@ -874,16 +874,13 @@ function getWorkflowStatus(tab, workflow) {
     return 'executing';
   }
   if (workflow.pauseReason === 'tab') {
-    return 'paused-by-tab';
+    return 'paused';
   }
   if (workflow.pauseReason === 'manual' || !workflow.enabled) {
     return 'paused';
   }
   if (workflow.lastError) {
     return 'error';
-  }
-  if (tab.pausedAll) {
-    return 'paused-by-tab';
   }
   return 'waiting';
 }
@@ -960,7 +957,7 @@ function serializeTab(tab) {
     label: tab.label,
     name: tab.label,
     createdAt: tab.createdAt,
-    pausedAll: tab.pausedAll,
+    pausedAll: allWorkflowsPaused(tab),
     url: safePageUrl(tab.page),
     navigation: tab.navigation || { state: 'ready', error: null },
     defaultPosition: cloneValue(tab.defaultPosition),
@@ -1458,9 +1455,7 @@ function resumeWorkflow(tab, workflow, options = {}) {
     return;
   }
 
-  if (tab.pausedAll && workflow.pauseReason !== 'tab') {
-    throw createHttpError('This tab is paused. Resume the tab first.', 409);
-  }
+  tab.pausedAll = false;
 
   workflow.enabled = true;
   const delayMs = Math.max(100, workflow.remainingMs || workflow.intervalMs);
@@ -1675,18 +1670,20 @@ async function runWorkflow(tab, workflow, options = {}) {
   }
 }
 
+function allWorkflowsPaused(tab) {
+  return tab.workflows.size ? Array.from(tab.workflows.values()).every(workflow => workflow.pauseReason !== null || !workflow.enabled) : tab.pausedAll;
+}
+
 function toggleWorkflowPause(tabId, workflowId) {
   const tab = getTabOrThrow(tabId);
   const workflow = getWorkflowOrThrow(tab, workflowId);
-
-  if (workflow.pauseReason === null) {
+  if (workflow.pauseReason === null && workflow.enabled) {
     pauseWorkflow(tab, workflow, 'manual');
-  } else if (workflow.pauseReason === 'manual') {
-    resumeWorkflow(tab, workflow);
   } else {
-    throw createHttpError('This workflow is paused by the tab. Resume the tab first.', 409);
+    if (workflow.pauseReason === null) workflow.pauseReason = 'manual';
+    resumeWorkflow(tab, workflow);
   }
-
+  tab.pausedAll = allWorkflowsPaused(tab);
   emitState();
   return serializeWorkflow(workflow, tab);
 }
@@ -1875,35 +1872,37 @@ function removeRuleFromTab(tabId, workflowId) {
 
 function toggleTabPause(tabId) {
   const tab = getTabOrThrow(tabId);
-
-  if (!tab.pausedAll) {
-    tab.pausedAll = true;
-    for (const workflow of tab.workflows.values()) {
-      if (workflow.pauseReason === null) {
-        pauseWorkflow(tab, workflow, 'tab', { silent: true });
-      }
+  const resume = allWorkflowsPaused(tab);
+  tab.pausedAll = false;
+  for (const workflow of tab.workflows.values()) {
+    if (resume) {
+      if (workflow.pauseReason === null && !workflow.enabled) workflow.pauseReason = 'manual';
+      resumeWorkflow(tab, workflow, { silent: true });
+    } else {
+      pauseWorkflow(tab, workflow, 'manual', { silent: true });
+      workflow.enabled = false;
+      workflow.pauseReason = 'manual';
     }
-    addLog({
-      tabId: tab.id,
-      tabLabel: tab.label,
-      action: 'tab.pause',
-      message: `${tab.label}: paused all workflows`,
-    });
-  } else {
-    tab.pausedAll = false;
-    for (const workflow of tab.workflows.values()) {
-      if (workflow.pauseReason === 'tab') {
-        resumeWorkflow(tab, workflow, { silent: true });
-      }
-    }
-    addLog({
-      tabId: tab.id,
-      tabLabel: tab.label,
-      action: 'tab.resume',
-      message: `${tab.label}: resumed all workflows`,
-    });
   }
+  tab.pausedAll = !resume;
+  addLog({ tabId: tab.id, tabLabel: tab.label, action: resume ? 'tab.resume' : 'tab.pause', message: `${tab.label}: ${resume ? 'resumed' : 'paused'} all workflows` });
+  emitState();
+  return serializeTab(tab);
+}
 
+function resetTabCountdowns(tabId) {
+  const tab = getTabOrThrow(tabId);
+  for (const workflow of tab.workflows.values()) {
+    clearWorkflowTimers(workflow);
+    removeQueuedRunsForWorkflow(tab, workflow.id);
+    workflow.queuedRuns = 0;
+    workflow.remainingMs = workflow.intervalMs;
+    workflow.nextRunAt = null;
+    if (workflow.enabled && workflow.pauseReason === null) {
+      startWorkflow(tab, workflow, workflow.intervalMs);
+    }
+  }
+  addLog({ tabId: tab.id, tabLabel: tab.label, action: 'tab.reset-countdowns', message: `${tab.label}: reset all workflow countdowns` });
   emitState();
   return serializeTab(tab);
 }
@@ -2429,6 +2428,15 @@ function bindSocketHandlers() {
         if (typeof callback === 'function') {
           callback({ ok: false, error: message });
         }
+      }
+    });
+
+    socket.on('tab:reset-countdowns', (payload, callback) => {
+      try {
+        const result = resetTabCountdowns(payload.tabId);
+        if (typeof callback === 'function') callback({ ok: true, result });
+      } catch (error) {
+        if (typeof callback === 'function') callback({ ok: false, error: error.message });
       }
     });
 

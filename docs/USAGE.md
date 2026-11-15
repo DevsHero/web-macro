@@ -32,6 +32,18 @@ target position are copied with fresh IDs and reset execution counters. The new
 tab starts paused; log in or prepare the page, then choose **Resume All**.
 The original tab and saved snapshots are unchanged.
 
+## Pause, Resume, and Reset Countdowns
+
+Pause All pauses every workflow in that tab. Resume All resumes every workflow,
+including workflows paused individually. Individual Pause and Resume buttons
+always work, including after Pause All. They share the same workflow state;
+there is no separate tab lock. All uses the same pause/resume colors as workflows.
+
+Reset All Countdowns restarts every workflow countdown in that tab from its full
+interval. Running workflows keep running; paused workflows stay paused with their
+full interval ready for Resume. Pending queued runs are cleared. A currently
+executing run finishes normally; it is not interrupted.
+
 ## Workflow Scheduling Rules
 
 - Workflows on the same tab run one at a time.

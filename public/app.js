@@ -647,13 +647,10 @@
 
   function renderWorkflowRow(tab, workflow) {
     const badge = statusMeta(workflow);
-    const actionDisabled = workflow.pauseReason === 'tab';
-    const toggleLabel = actionDisabled ? 'Paused by Tab' : workflow.pauseReason ? 'Resume' : 'Pause';
-    const toggleClasses = actionDisabled
-      ? 'cursor-not-allowed border border-white/10 bg-white/5 text-slate-500'
-      : workflow.pauseReason
-        ? 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20'
-        : 'border border-amber-300/20 bg-amber-300/10 text-amber-100 hover:bg-amber-300/20';
+    const toggleLabel = workflow.pauseReason || !workflow.enabled ? 'Resume' : 'Pause';
+    const toggleClasses = workflow.pauseReason || !workflow.enabled
+      ? 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20'
+      : 'border border-amber-300/20 bg-amber-300/10 text-amber-100 hover:bg-amber-300/20';
 
     return `
       <div class="group relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-gradient-to-br from-white/6 via-slate-900/70 to-black/25 p-4 shadow-[0_18px_50px_rgba(2,6,23,0.28)] transition hover:border-teal-300/20 hover:shadow-[0_24px_60px_rgba(17,24,39,0.42)]" data-workflow-row data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}">
@@ -679,7 +676,7 @@
           </div>
           <div class="flex flex-wrap gap-2" style="align-self: stretch;">
             <button type="button" data-action="run-workflow-once" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/20" style="flex: 1 1 6.5rem;">Run Once</button>
-            <button type="button" data-action="toggle-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" ${actionDisabled ? 'disabled' : ''} class="rounded-2xl px-3 py-2 text-xs font-semibold transition ${toggleClasses}" style="flex: 1 1 6.5rem;">${toggleLabel}</button>
+            <button type="button" data-action="toggle-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl px-3 py-2 text-xs font-semibold transition ${toggleClasses}" style="flex: 1 1 6.5rem;">${toggleLabel}</button>
             <button type="button" data-action="edit-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10" style="flex: 1 1 6.5rem;">Edit</button>
             <button type="button" data-action="duplicate-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10" style="flex: 1 1 6.5rem;">Duplicate</button>
             <button type="button" data-action="remove-workflow" data-tab-id="${escapeHtml(tab.id)}" data-workflow-id="${escapeHtml(workflow.id)}" class="rounded-2xl border border-rose-300/20 bg-rose-300/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-300/20" style="flex: 1 1 6.5rem;">Remove</button>
@@ -710,7 +707,8 @@
             </div>
             <div class="flex flex-wrap gap-2 lg:justify-end">
               <button type="button" data-action="add-workflow" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-teal-300/20 bg-teal-300/10 px-4 py-2 text-sm font-semibold text-teal-100 transition hover:bg-teal-300/20">Add Workflow</button>
-              <button type="button" data-action="toggle-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10">${tab.pausedAll ? 'Resume All' : 'Pause All'}</button>
+              <button type="button" data-action="toggle-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border px-4 py-2 text-sm font-semibold transition ${tab.pausedAll ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20' : 'border-amber-300/20 bg-amber-300/10 text-amber-100 hover:bg-amber-300/20'}">${tab.pausedAll ? 'Resume All' : 'Pause All'}</button>
+              <button type="button" data-action="reset-countdowns" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10">Reset All Countdowns</button>
               <button type="button" data-action="clone-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10">Duplicate Tab</button>
               <button type="button" data-action="close-tab" data-tab-id="${escapeHtml(tab.id)}" class="rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-300/20">Close Tab</button>
             </div>
@@ -1685,6 +1683,12 @@
 
     if (action === 'edit-workflow') {
       openWorkflowModal(tabId, workflowId);
+      return;
+    }
+
+    if (action === 'reset-countdowns') {
+      const response = await emitWithAck('tab:reset-countdowns', { tabId: Number(tabId) });
+      flash(response.ok ? 'All countdowns reset to their full intervals.' : response.error, response.ok ? 'success' : 'error');
       return;
     }
 

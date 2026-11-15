@@ -61,6 +61,39 @@ test('Duplicate Tab prompts for URL and copies independent workflows through the
     await cloned.page.waitForURL('**/health');
     [...cloned.workflows.values()][0].steps[1].text = 'changed';
     assert.equal(originals[0].steps[1].text, '@go 0');
+    // All and individual controls operate on the same workflow states, including
+    // legacy tab-paused workflows and manually paused/disabled workflows.
+    const card = dashboard.locator(`[data-tab-card][data-tab-id="${original.id}"]`);
+    await card.getByRole('button', { name: 'Resume All', exact: true }).click();
+    await card.getByRole('button', { name: 'Pause All', exact: true }).waitFor();
+    assert.ok(originals.every(w => w.enabled && w.pauseReason === null));
+    const chatRow = card.locator(`[data-workflow-row][data-workflow-id="${originals[0].id}"]`);
+    await chatRow.getByRole('button', { name: 'Pause', exact: true }).click();
+    await chatRow.getByRole('button', { name: 'Resume', exact: true }).waitFor();
+    assert.equal(originals[0].enabled, false);
+    assert.equal(originals[1].enabled, true);
+    await card.getByRole('button', { name: 'Pause All', exact: true }).click();
+    await card.getByRole('button', { name: 'Resume All', exact: true }).waitFor();
+    assert.ok(originals.every(w => !w.enabled && w.pauseReason !== null));
+    // A child can resume directly after All paused the tab.
+    await chatRow.getByRole('button', { name: 'Resume', exact: true }).click();
+    await card.getByRole('button', { name: 'Pause All', exact: true }).waitFor();
+    assert.equal(originals[0].enabled, true);
+    assert.equal(originals[1].enabled, false);
+    originals[1].remainingMs = 1234;
+    const previousDeadline = originals[0].nextRunAt;
+    await card.getByRole('button', { name: 'Reset All Countdowns', exact: true }).click();
+    await dashboard.getByText('All countdowns reset to their full intervals.', { exact: true }).waitFor();
+    assert.ok(originals[0].nextRunAt > previousDeadline);
+    assert.equal(originals[1].remainingMs, originals[1].intervalMs);
+    assert.equal(originals[1].enabled, false);
+    assert.equal(originals[1].timer, null);
+    assert.equal(originals[1].nextRunAt, null);
+    await card.getByRole('button', { name: 'Pause All', exact: true }).click();
+    await card.getByRole('button', { name: 'Resume All', exact: true }).waitFor();
+    await card.getByRole('button', { name: 'Resume All', exact: true }).click();
+    await card.getByRole('button', { name: 'Pause All', exact: true }).waitFor();
+    assert.ok(originals.every(w => w.enabled && w.pauseReason === null));
     // Add Tab still uses the same dialog with clone state cleared.
     await dashboard.getByRole('button', { name: 'Add New Tab', exact: true }).click();
     assert.equal(await dashboard.locator('#addTabUrlInput').inputValue(), '');
