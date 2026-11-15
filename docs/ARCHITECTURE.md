@@ -140,3 +140,8 @@ Primary socket operations include:
   processes, scheduled across cores by the OS; extra Node workers would duplicate
   browser connections and add message/heap overhead to this I/O coordinator.
 - Per-tab serialization reduces duplicated or conflicting input bursts.
+
+The roBrowser compatibility boundary follows its
+[Renderer loop](https://github.com/MrAntares/roBrowserLegacy/blob/master/src/Renderer/Renderer.js):
+game ticks and event processing share that loop with drawing. Power Saving keeps
+the loop and callbacks active rather than lowering their execution frequency.

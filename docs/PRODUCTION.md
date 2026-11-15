@@ -66,12 +66,12 @@ Local macOS sample (2026-11-15, 50 ms variant):
 | State builds / packets | 192 | 9 | 1 |
 | Snapshot bytes | 5,412,927 | 255,099 | 28,397 |
 | Log packets / retained entries | 288 / 288 | 9 / 288 | 0 / 0 |
-| Controller CPU time, including final delivery | 140 ms | 57 ms | 38 ms |
+| Controller CPU time, including final delivery | 140 ms | 57 ms | 28 ms |
 
 The snapshot payload fell by 95.3% in this sample. CPU timings are illustrative,
 not a guarantee of whole-machine improvement or game frame rate.
 The Power Saving 20-tab variant completed 320 executions with zero errors and
-one 86,014-byte snapshot (104 ms controller CPU in this local sample).
+one 86,014-byte snapshot (99 ms controller CPU in this local sample).
 
 Power Saving additionally tests real WebGL screen-pass suppression with active
 game-style ticks, heartbeat timers, offscreen texture passes and repeated trusted

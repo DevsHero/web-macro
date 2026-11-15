@@ -2171,6 +2171,7 @@ async function replaceRuntimeFromDefinitions(definition, options = {}) {
   await closeBrowserController();
 
   browserConfigState = normalizedBrowserConfig;
+  if (browserConfigState.powerSaving) clearLogs();
   currentConfigName = options.configName ?? currentConfigName;
   await initializeBrowserController({ force: true });
 

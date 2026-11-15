@@ -162,9 +162,10 @@ These environment variables set startup defaults; dashboard changes apply to
 the current runtime. Save/export a snapshot and load it again after a restart
 to restore changed settings and workflows.
 
-If the Chromium postinstall downloader does not support your OS, install with
-`npm ci --ignore-scripts && npm run build:css` and select an existing supported
-browser. The local service starts Node directly; the upstream npm start/stop
+The installer checks for an available supported browser before downloading
+Chromium. On Ubuntu 26.04, install Chrome, Brave or another supported browser
+using your OS installer, then run `npm ci` normally. Browser tests reuse the
+same detected executable. The local service starts Node directly; the upstream npm start/stop
 scripts kill listeners on the selected port.
 
 ## Recommended Operating Pattern
