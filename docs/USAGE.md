@@ -30,6 +30,20 @@ http://localhost:3005
 - Repeat triggers can queue or skip depending on the overlap setting.
 - Different tabs may still run independently.
 
+## Chat and Keyboard Focus
+
+Each workflow run starts with keyboard steps targeting the game canvas. After a
+Type Text step, keyboard steps keep focus in the active input, textarea, select,
+or contenteditable editor, including editors inside iframes and open shadow roots.
+Explicit focus, click, move, or navigate steps restore game-key targeting.
+The next run starts with game keys again, so chat left open by a server response
+does not consume the opening Enter.
+
+For roBrowser chat, use `Enter` → `Type Text: @go 0` → `Enter`. The last Enter
+submits to the chat editor; extra Enter steps or longer delays are unnecessary.
+If another workflow needs to leave an active chat editor and cast game hotkeys,
+add an explicit `Focus: canvas` step first.
+
 ## Saved Snapshots
 
 Use the config panel to:

@@ -5,6 +5,7 @@ const path = require('path');
 const express = require('express');
 const { Server } = require('socket.io');
 const { chromium } = require('playwright');
+const { waitForPageReady, locateGameCanvas, createWorkflowInput } = require('./lib/browser-input');
 
 const PORT = Number(process.env.PORT) || 3005;
 const GAME_URL = 'https://www.the4rtist.com/playro/';
@@ -1040,88 +1041,6 @@ function emitState(targetSocket) {
   io.emit('state:snapshot', payload);
 }
 
-async function waitForPageReady(page) {
-  try {
-    await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
-  } catch (_error) {
-    // Ignore slow page loads.
-  }
-}
-
-async function locateGameCanvas(page) {
-  await waitForPageReady(page);
-
-  async function pickLargestCanvas(target, frameRef) {
-    const candidates = await target.$$('canvas');
-    let best = null;
-
-    for (const canvasHandle of candidates) {
-      const box = await canvasHandle.boundingBox();
-      if (!box || box.width < 2 || box.height < 2) {
-        continue;
-      }
-
-      const area = box.width * box.height;
-      if (!best || area > best.area) {
-        best = {
-          area,
-          canvasHandle,
-          frame: frameRef,
-        };
-      }
-    }
-
-    return best;
-  }
-
-  const timeoutMs = 8000;
-  const pollMs = 180;
-  const deadline = Date.now() + timeoutMs;
-
-  while (Date.now() < deadline) {
-    let bestCanvas = await pickLargestCanvas(page, null);
-
-    for (const frame of page.frames()) {
-      const frameCandidate = await pickLargestCanvas(frame, frame);
-      if (!frameCandidate) {
-        continue;
-      }
-
-      if (!bestCanvas || frameCandidate.area > bestCanvas.area) {
-        bestCanvas = frameCandidate;
-      }
-    }
-
-    if (bestCanvas) {
-      return {
-        frame: bestCanvas.frame,
-        canvasHandle: bestCanvas.canvasHandle,
-      };
-    }
-
-    await page.waitForTimeout(pollMs);
-  }
-
-  return null;
-}
-
-async function pressMacroKey(page, key, holdDurationMs = 0) {
-  const canvasTarget = await locateGameCanvas(page);
-
-  if (canvasTarget && canvasTarget.canvasHandle) {
-    await canvasTarget.canvasHandle.evaluate((node) => {
-      if (!node.hasAttribute('tabindex')) {
-        node.setAttribute('tabindex', '-1');
-      }
-      node.focus();
-    });
-    await canvasTarget.canvasHandle.press(key, { delay: holdDurationMs });
-    return;
-  }
-
-  await page.keyboard.press(key, { delay: holdDurationMs });
-}
-
 async function focusTarget(page, target, workflow = null) {
   if (target === 'page') {
     if (shouldActivateTabForWorkflow(workflow)) {
@@ -1606,7 +1525,7 @@ function resumeWorkflow(tab, workflow, options = {}) {
   }
 }
 
-async function executeWorkflowStep(tab, workflow, step, index) {
+async function executeWorkflowStep(tab, workflow, step, index, input = createWorkflowInput(tab.page)) {
   const page = tab.page;
   const stepNumber = index + 1;
   let stepResult = 'ok';
@@ -1626,32 +1545,27 @@ async function executeWorkflowStep(tab, workflow, step, index) {
       }
       break;
     case 'focus':
+      input.resetFocus();
       await focusTarget(page, step.target, workflow);
       break;
     case 'keyboard':
-      await pressMacroKey(page, step.key, step.holdDurationMs);
+      await input.pressKey(step.key, step.holdDurationMs);
       break;
     case 'wait':
       await page.waitForTimeout(step.durationMs);
       break;
     case 'move': {
+      input.resetFocus();
       await performRobustMove(page, tab, step, workflow);
       break;
     }
     case 'click': {
+      input.resetFocus();
       await performRobustClick(page, tab, step);
       break;
     }
     case 'type': {
-      if (step.clearFirst) {
-        await page.keyboard.press('Control+a');
-        await page.waitForTimeout(30);
-        await page.keyboard.press('Delete');
-        await page.waitForTimeout(30);
-      }
-      if (step.text) {
-        await page.keyboard.type(step.text, { delay: step.typingDelayMs || 0 });
-      }
+      await input.typeText(step.text, step);
       break;
     }
     case 'scroll': {
@@ -1659,6 +1573,7 @@ async function executeWorkflowStep(tab, workflow, step, index) {
       break;
     }
     case 'navigate': {
+      input.resetFocus();
       await page.goto(step.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       break;
     }
@@ -1758,8 +1673,9 @@ async function runWorkflow(tab, workflow, options = {}) {
   });
 
   try {
+    const input = createWorkflowInput(tab.page);
     for (let index = 0; index < workflow.steps.length; index += 1) {
-      await executeWorkflowStep(tab, workflow, workflow.steps[index], index);
+      await executeWorkflowStep(tab, workflow, workflow.steps[index], index, input);
     }
 
     workflow.lastRunAt = nowIso();

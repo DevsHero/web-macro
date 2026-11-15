@@ -1,0 +1,29 @@
+{
+  "steps": [
+    {
+      "id": "draft-step-k0vxj87i",
+      "command": "keyboard",
+      "delayBeforeMs": 150,
+      "delayAfterMs": 100,
+      "key": "Enter",
+      "holdDurationMs": 100
+    },
+    {
+      "id": "draft-step-f1cqvno0",
+      "command": "type",
+      "delayBeforeMs": 150,
+      "delayAfterMs": 0,
+      "text": "@go 0",
+      "clearFirst": false,
+      "typingDelayMs": 0
+    },
+    {
+      "id": "draft-step-c6itx739",
+      "command": "keyboard",
+      "delayBeforeMs": 300,
+      "delayAfterMs": 0,
+      "key": "Enter",
+      "holdDurationMs": 0
+    }
+  ]
+}

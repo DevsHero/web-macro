@@ -37,7 +37,8 @@ http://localhost:3005
 - `npm run start`: start the controller on `PORT` or default `3005`, killing only that target port before boot.
 - `npm run dev`: start the controller without changing behavior from `start`.
 - `npm run stop`: kill listeners on `PORT` or default `3005`.
-- `npm run check`: syntax-check the server, client app, and manifest.
+- `npm run check`: syntax-check the browser input module, server, client app, and manifest.
+- `npm test`: run headless keyboard and chat regression tests (`npx playwright install chromium --only-shell` if needed).
 - `npm run clean`: remove local runtime caches and generated browser profile data.
 
 ## Project Structure
