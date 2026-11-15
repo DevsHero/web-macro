@@ -6,8 +6,10 @@ const express = require('express');
 const { Server } = require('socket.io');
 const { chromium } = require('playwright');
 const { waitForPageReady, locateGameCanvas, createWorkflowInput } = require('./lib/browser-input');
+const { discoverBrowsers, isExecutable } = require('./browser-discovery');
 
 const PORT = Number(process.env.PORT) || 3005;
+const HOST = process.env.HOST || '127.0.0.1';
 const GAME_URL = 'https://www.the4rtist.com/playro/';
 const CONFIG_DIR = path.join(__dirname, 'configs');
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -48,14 +50,14 @@ const HIDDEN_EXECUTION_EXTRA_ARGS = [
   '--disable-background-media-suspend',
 ];
 const DEFAULT_BROWSER_CONFIG = {
-  type: 'opera',
-  executablePath: '',
+  type: process.env.BROWSER_TYPE || 'auto',
+  executablePath: process.env.BROWSER_EXECUTABLE_PATH || '',
   userDataDir: '',
   launchMode: 'launch',
   connectOverCDP: false,
   cdpUrl: 'http://127.0.0.1:9222',
   args: DEFAULT_LAUNCH_ARGS,
-  headless: false,
+  headless: process.env.BROWSER_HEADLESS === 'true',
   activateTabOnInteraction: false,
   optimizeForHiddenExecution: true,
 };
@@ -65,46 +67,6 @@ const DEFAULT_TAB_POSITION = {
   preset: 'center',
   xRatio: 0.5,
   yRatio: 0.55,
-};
-const BROWSER_CANDIDATES = {
-  chromium: [],
-  chrome: [
-    {
-      name: 'Google Chrome',
-      path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    },
-  ],
-  edge: [
-    {
-      name: 'Microsoft Edge',
-      path: '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-    },
-  ],
-  opera: [
-    {
-      name: 'Opera',
-      path: '/Applications/Opera.app/Contents/MacOS/Opera',
-    },
-    {
-      name: 'Opera One',
-      path: '/Applications/Opera One.app/Contents/MacOS/Opera One',
-    },
-    {
-      name: 'Opera One',
-      path: '/Applications/Opera One.app/Contents/MacOS/Opera',
-    },
-  ],
-  'opera-gx': [
-    {
-      name: 'Opera GX',
-      path: '/Applications/Opera GX.app/Contents/MacOS/Opera GX',
-    },
-    {
-      name: 'Opera GX',
-      path: '/Applications/Opera GX.app/Contents/MacOS/Opera',
-    },
-  ],
-  custom: [],
 };
 const WORKFLOW_TEMPLATES = [
   {
@@ -224,6 +186,11 @@ app.use(express.static(PUBLIC_DIR, {
   },
 }));
 
+app.get('/api/browsers', (_request, response) => {
+  response.setHeader('Cache-Control', 'no-store');
+  response.json({ platform: process.platform, browsers: discoverBrowsers() });
+});
+
 app.get('/health', (_request, response) => {
   response.json({
     ok: true,
@@ -235,6 +202,7 @@ app.get('/health', (_request, response) => {
     browserSource: browserRuntime.source,
     browserLaunchMode: browserSessionMode,
     currentConfigName,
+    headless: browserConfigState.headless,
   });
 });
 
@@ -383,6 +351,10 @@ function browserTypeLabel(type) {
   switch (type) {
     case 'chrome':
       return 'Google Chrome';
+    case 'auto':
+      return 'Automatic';
+    case 'brave':
+      return 'Brave';
     case 'edge':
       return 'Microsoft Edge';
     case 'opera':
@@ -485,7 +457,7 @@ function normalizeBrowserConfig(rawConfig = {}) {
     ...(rawConfig || {}),
   };
 
-  const allowedTypes = ['chromium', 'chrome', 'edge', 'opera', 'opera-gx', 'custom'];
+  const allowedTypes = ['auto', 'chromium', 'chrome', 'edge', 'brave', 'opera', 'opera-gx', 'custom'];
   const type = allowedTypes.includes(merged.type) ? merged.type : DEFAULT_BROWSER_CONFIG.type;
   const allowedLaunchModes = ['launch', 'persistent', 'connectOverCDP'];
   const launchMode = allowedLaunchModes.includes(merged.launchMode) ? merged.launchMode : DEFAULT_BROWSER_CONFIG.launchMode;
@@ -507,42 +479,22 @@ function normalizeBrowserConfig(rawConfig = {}) {
 function resolveBrowserRuntime(config) {
   const normalizedConfig = normalizeBrowserConfig(config);
 
-  if (normalizedConfig.type === 'chromium') {
-    return {
-      name: browserTypeLabel('chromium'),
-      executablePath: null,
-      source: 'bundled',
-    };
-  }
-
-  if (normalizedConfig.executablePath && fs.existsSync(normalizedConfig.executablePath)) {
+  if (normalizedConfig.executablePath) {
+    if (!isExecutable(normalizedConfig.executablePath)) {
+      throw createHttpError('The selected browser is no longer available. Scan again in Browser Settings or choose another browser.', 400);
+    }
     return {
       name: browserTypeLabel(normalizedConfig.type),
       executablePath: normalizedConfig.executablePath,
       source: 'custom-path',
     };
   }
-
-  const candidates = BROWSER_CANDIDATES[normalizedConfig.type] || [];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate.path)) {
-      return {
-        name: candidate.name,
-        executablePath: candidate.path,
-        source: 'auto-detected',
-      };
-    }
+  const available = discoverBrowsers();
+  const detected = normalizedConfig.type === 'auto' ? available[0] : available.find(item => item.type === normalizedConfig.type);
+  if (!detected) {
+    throw createHttpError('Browser not found. Install Chrome, Edge, Brave, Chromium or Opera, then scan again in Browser Settings.', 400);
   }
-
-  if (normalizedConfig.type === 'custom') {
-    throw createHttpError('Custom browser path was not found. Provide a valid executable path.', 400);
-  }
-
-  return {
-    name: browserTypeLabel(normalizedConfig.type),
-    executablePath: null,
-    source: 'bundled-fallback',
-  };
+  return { name: detected.name, executablePath: detected.executablePath, source: detected.source };
 }
 
 function buildBrowserSummary() {
@@ -564,7 +516,8 @@ function buildBrowserSummary() {
     type: browserConfig.type,
     typeLabel: browserTypeLabel(browserConfig.type),
     launchMode: browserConfig.launchMode,
-    summary: `${browserRuntime.name} · ${modeLabel}`,
+    headless: browserConfig.headless,
+    summary: `${browserRuntime.name} · ${browserConfig.headless ? "No window (headless)" : "Browser window"} · ${modeLabel}`,
     executablePath: browserRuntime.executablePath || browserConfig.executablePath || '',
     profileLabel,
     activationPolicyLabel: browserConfig.activateTabOnInteraction ? 'Browser default: allow tab activation' : 'Browser default: background-safe',
@@ -1008,6 +961,7 @@ function serializeTab(tab) {
     createdAt: tab.createdAt,
     pausedAll: tab.pausedAll,
     url: safePageUrl(tab.page),
+    navigation: tab.navigation || { state: 'ready', error: null },
     defaultPosition: cloneValue(tab.defaultPosition),
     browserInfo: buildBrowserSummary(),
     workflows,
@@ -2006,10 +1960,17 @@ function handleBrowserControllerClosed() {
 
 async function launchBrowserController() {
   const normalizedConfig = normalizeBrowserConfig(browserConfigState);
-  const resolvedBrowser = resolveBrowserRuntime(normalizedConfig);
+  const resolvedBrowser = normalizedConfig.launchMode === 'connectOverCDP' || normalizedConfig.connectOverCDP
+    ? { name: browserTypeLabel(normalizedConfig.type), executablePath: null, source: 'cdp' }
+    : resolveBrowserRuntime(normalizedConfig);
   browserRuntime = resolvedBrowser;
 
   const launchArgs = buildLaunchArgs(normalizedConfig);
+  if (process.platform === 'linux' && !normalizedConfig.headless &&
+      normalizedConfig.launchMode !== 'connectOverCDP' && !normalizedConfig.connectOverCDP &&
+      !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+    throw createHttpError('No Ubuntu desktop session is available. Start Web Macro from your desktop session, or enable headless mode for background use.', 400);
+  }
   const launchOptions = {
     headless: normalizedConfig.headless,
     args: launchArgs,
@@ -2178,8 +2139,8 @@ async function createGameTab(options = {}) {
     throw createHttpError('Browser controller is not ready yet.', 503);
   }
 
-  const page = await browserContext.newPage();
   const resolvedUrl = normalizeTabUrl(options.url);
+  const page = await browserContext.newPage();
   const tab = createTabRecord(page, {
     label: options.label,
     pausedAll: options.pausedAll,
@@ -2188,36 +2149,29 @@ async function createGameTab(options = {}) {
 
   emitState();
 
-  if (resolvedUrl !== 'about:blank') {
+  tab.navigation = { state: resolvedUrl === 'about:blank' ? 'ready' : 'loading', requestedUrl: resolvedUrl, error: null };
+  const navigate = async () => {
     try {
-      await page.goto(resolvedUrl, {
-        waitUntil: 'domcontentloaded',
-        timeout: 45000,
-      });
-      await waitForPageReady(page);
-      addLog({
-        tabId: tab.id,
-        tabLabel: tab.label,
-        action: 'tab.open',
-        message: `${tab.label}: opened ${resolvedUrl}`,
-      });
+      if (resolvedUrl !== 'about:blank') {
+        await page.goto(resolvedUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await waitForPageReady(page);
+      }
+      tab.navigation.state = 'ready';
+      addLog({ tabId: tab.id, tabLabel: tab.label, action: 'tab.open', message: `${tab.label}: opened ${resolvedUrl}` });
     } catch (error) {
-      addLog({
-        level: 'error',
-        tabId: tab.id,
-        tabLabel: tab.label,
-        action: 'tab.open',
-        result: 'error',
-        message: `${tab.label}: failed to open ${resolvedUrl} (${error.message})`,
-      });
+      if (page.isClosed()) return;
+      tab.navigation = { state: 'error', requestedUrl: resolvedUrl, error: error.message };
+      addLog({ tabId: tab.id, level: 'error', action: 'tab.open', message: `${tab.label}: failed to load ${resolvedUrl} (${error.message})` });
+    } finally {
+      if (tabs.has(tab.id)) emitState();
     }
-  } else {
-    addLog({
-      tabId: tab.id,
-      tabLabel: tab.label,
-      action: 'tab.open',
-      message: `${tab.label}: opened blank tab`,
-    });
+  };
+  // User creation acknowledges the new tab immediately; navigation reports separately.
+  // Snapshot restoration still waits for loading before scheduling its workflows.
+  if (options.backgroundNavigation) void navigate();
+  else await navigate();
+  if (!browserConfigState.headless && options.backgroundNavigation) {
+    await page.bringToFront().catch(() => {});
   }
 
   if (Array.isArray(options.workflows)) {
@@ -2328,6 +2282,8 @@ function deleteSavedConfig(configId) {
 
 async function updateBrowserConfig(rawConfig) {
   const nextBrowserConfig = normalizeBrowserConfig(rawConfig);
+  // Reject a disappeared/invalid executable before closing the current browser.
+  if (nextBrowserConfig.launchMode !== 'connectOverCDP' && !nextBrowserConfig.connectOverCDP) resolveBrowserRuntime(nextBrowserConfig);
   const runtimeSnapshot = {
     browser: nextBrowserConfig,
     tabs: Array.from(tabs.values())
@@ -2374,7 +2330,7 @@ function bindSocketHandlers() {
 
     socket.on('tab:create', async (payload, callback) => {
       try {
-        const tab = await createGameTab(payload || {});
+        const tab = await createGameTab({ ...(payload || {}), backgroundNavigation: true });
         if (typeof callback === 'function') {
           callback({ ok: true, result: tab });
         }
@@ -2613,7 +2569,7 @@ async function shutdown(signal) {
   await closeBrowserController();
 
   await new Promise((resolve) => {
-    server.close(() => resolve());
+    io.close(() => resolve());
   });
 
   process.exit(0);
@@ -2639,7 +2595,7 @@ async function start() {
     process.exit(1);
   });
 
-  server.listen(PORT, () => {
+  server.listen(PORT, HOST, () => {
     console.log(`web-macro is running at http://localhost:${PORT}`);
     console.log(`Browser session mode: ${buildBrowserSummary().summary}`);
     console.log(`Browser runtime: ${browserRuntime.name}${browserRuntime.executablePath ? ` (${browserRuntime.executablePath})` : ''}`);
